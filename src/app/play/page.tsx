@@ -264,10 +264,13 @@ function PlayPageClient() {
   }, [shortdramaId, loadingShortdramaDetails, shortdramaDetails]);
   // 统一的字幕设置清理函数
   const clearSubtitleSettings = () => {
+    console.log('🔍 [调试] clearSubtitleSettings 被调用');  
+    console.trace('🔍 [调试] 调用堆栈:'); // 打印调用堆栈
     if (artPlayerRef.current?.setting) {
       const settings = artPlayerRef.current.setting.option;
       for (let i = settings.length - 1; i >= 0; i--) {
         if (settings[i].html === '外部字幕' || settings[i].html === '内嵌字幕') {
+          console.log('🔍 [调试] 删除字幕设置项:', settings[i].html);
           settings.splice(i, 1);
         }
       }
@@ -298,6 +301,7 @@ useEffect(() => {
       const data = await response.json();
       setBananaMetadata(data);
       console.log('✅ Banana 元数据获取成功:', data);
+      console.log('🔍 [调试] 第301行已删除,不应该有清理操作');
       // 👇 在这里添加选择器,确保播放器已初始化
       if (artPlayerRef.current && data.audioTracks && data.audioTracks.length > 1) {
         console.log('🎵 添加音轨选择器');
@@ -1762,14 +1766,17 @@ useEffect(() => {
     }
   // 🆕 集数变化时重新检测字幕
   if (artPlayerRef.current && !isSourceChangingRef.current) {
+    console.log('🔍 [调试] 剧集切换字幕检测开始');
     setTimeout(async () => {
+      console.log('🔍 [调试] 1秒延迟后开始处理字幕');
       try {
         if (!artPlayerRef.current || !detail) return;
         console.log('🔄 集数变化,重新检测字幕...');
         
         const newVideoUrl = detail.episodes?.[currentEpisodeIndex] || '';
-        
+        console.log('🔍 [调试] 新视频URL:', newVideoUrl);
         // 1️⃣ 先清除所有旧的字幕设置
+        console.log('🔍 [调试] 准备清除旧字幕');
         clearSubtitleSettings();
         
         // 2️⃣ 检测外部字幕
