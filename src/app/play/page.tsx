@@ -3554,20 +3554,63 @@ useEffect(() => {
         // 应用CSS优化
         optimizeDanmukuControlsCSS();
 
-// 🆕 自动检测并加载字幕  
-try {  
-  console.log('🔍 开始检测字幕文件...');  
-  const autoSubtitles = await autoLoadSubtitles(videoUrl);  
-    
-  if (autoSubtitles.length > 0) {  
-    console.log('✅ 检测到字幕文件:', autoSubtitles);  
-    setLoadedSubtitleUrls(autoSubtitles);  
-  } else {  
-    console.log('📭 未检测到字幕文件');  
+// 🆕 自动检测并加载字幕    
+(async () => {  
+  try {  
+    console.log('🔍 开始检测字幕文件...');  
+    const autoSubtitles = await autoLoadSubtitles(videoUrl);  
+      
+    if (autoSubtitles.length > 0) {  
+      console.log('✅ 检测到字幕文件:', autoSubtitles);  
+      setLoadedSubtitleUrls(autoSubtitles);  
+        
+      // 如果有多个字幕,添加切换选项  
+      artPlayerRef.current.setting.add({  
+        html: '外部字幕',  
+        tooltip: autoSubtitles.length > 0 ? `当前:${autoSubtitles[0].filename}` : '当前:关闭',  
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',  
+        selector: [  
+          { html: '关闭', value: 'off' },  
+          ...autoSubtitles.map((sub) => ({  
+            html: sub.filename,  
+            value: sub.url,  
+            subtitle: { url: sub.url, type: sub.type },  
+          })),  
+        ],  
+        onSelect: function (item: any) {  
+          if (item.value === 'off') {  
+            if (artPlayerRef.current) {  
+              artPlayerRef.current.subtitle.show = false;  
+            }  
+            return '关闭';  
+          }  
+          if (artPlayerRef.current) {  
+            artPlayerRef.current.subtitle.switch(item.subtitle.url, {  
+              type: item.subtitle.type,  
+            });  
+            artPlayerRef.current.subtitle.show = true;  
+          }  
+          return item.html;  
+        },  
+      });  
+        
+      // 默认加载第一个检测到的字幕  
+      const firstSub = autoSubtitles[0];  
+      artPlayerRef.current.subtitle.switch(firstSub.url, {  
+        type: firstSub.type,  
+      });  
+      console.log('✅ 已自动加载字幕:', firstSub.filename);  
+        
+      if (artPlayerRef.current) {  
+        artPlayerRef.current.notice.show = `已加载字幕: ${firstSub.filename}`;  
+      }  
+    } else {  
+      console.log('📭 未检测到字幕文件');  
+    }  
+  } catch (error) {  
+    console.warn('⚠️ 自动加载字幕失败:', error);  
   }  
-} catch (error) {  
-  console.warn('⚠️ 自动加载字幕失败:', error);  
-}
+})();
         // 精确解决弹幕菜单与进度条拖拽冲突 - 基于ArtPlayer原生拖拽逻辑
         const fixDanmakuProgressConflict = () => {
           let isDraggingProgress = false;
