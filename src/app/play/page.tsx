@@ -2858,22 +2858,25 @@ useEffect(() => {
       }
     };
 
-    // 🔑 检查视频状态
-    if (art.video && art.video.readyState >= 2) {
-      // 视频已就绪,立即加载
-      loadSubtitle();
-    } else {
-      // 视频未就绪,等待 canplay 事件
-      const handleCanPlay = () => {
-        loadSubtitle();
-        art.off('video:canplay', handleCanPlay);
-      };
-      art.on('video:canplay', handleCanPlay);
+    // 🔑 关键改变:总是监听 canplay 事件
+   const handleCanPlay = () => {
+     console.log('🎬 [V8] canplay 事件触发,开始加载字幕');
+     loadSubtitle();
+     art.off('video:canplay', handleCanPlay);
+   };
 
-      return () => {
-        art.off('video:canplay', handleCanPlay);
-      };
-    }
+   // 如果视频已经可以播放,立即触发一次
+   if (art.video && art.video.readyState >= 2) {
+     console.log('🎬 [V8] 视频已就绪,立即加载字幕');
+     loadSubtitle();
+   }
+
+   // 同时监听 canplay,以防视频重新加载
+   art.on('video:canplay', handleCanPlay);
+
+   return () => {
+     art.off('video:canplay', handleCanPlay);
+   };
   } else if (art && autoSubtitles.length === 0) {
     console.log(`🧹 [V8] 无字幕,清理外部字幕设置`);
     art.subtitle.show = false;
