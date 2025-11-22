@@ -1669,62 +1669,6 @@ function PlayPageClient() {
           console.log('✅ 新集数检测到字幕:', autoSubtitles);  
            // 🆕 更新字幕 URL  
           setLoadedSubtitleUrls(autoSubtitles);
-          // 清除旧的字幕设置项  
-          if (artPlayerRef.current.setting) {  
-            // 移除旧的字幕设置项(如果存在)  
-            const settings = artPlayerRef.current.setting.option;  
-            const subtitleIndex = settings.findIndex((item: any) => item.html === '字幕');  
-            if (subtitleIndex >= 0) {  
-              settings.splice(subtitleIndex, 1);  
-            }  
-          }  
-
-          // 添加新的字幕设置项  
-          artPlayerRef.current.setting.add({  
-            html: '字幕',  
-            tooltip: `当前:${autoSubtitles[0].filename}`,  
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',  
-            selector: [  
-              {  
-                html: '关闭',  
-                value: 'off',  
-              },  
-              ...autoSubtitles.map((sub) => ({  
-                html: sub.filename,  
-                value: sub.url,  
-                subtitle: {  
-                  url: sub.url,  
-                  type: sub.type,  
-                },  
-              })),  
-            ],  
-            onSelect: function (item: any) {  
-              if (item.value === 'off') {  
-                if (artPlayerRef.current) {  
-                  artPlayerRef.current.subtitle.show = false;  
-                }  
-                return '关闭';  
-              }  
-
-              if (artPlayerRef.current) {  
-                artPlayerRef.current.subtitle.switch(item.subtitle.url, {  
-                  type: item.subtitle.type,  
-                });  
-                artPlayerRef.current.subtitle.show = true;  
-              }  
-              return item.html;  
-            },  
-          });  
-
-          // 自动加载第一个字幕  
-          const firstSub = autoSubtitles[0];  
-          artPlayerRef.current.subtitle.switch(firstSub.url, {  
-            type: firstSub.type,  
-          });  
-
-          if (artPlayerRef.current) {  
-            artPlayerRef.current.notice.show = `已加载字幕: ${firstSub.filename}`;  
-          }  
         } else {  
           console.log('📭 新集数未检测到字幕文件');  
           // 隐藏字幕  
@@ -3424,7 +3368,7 @@ useEffect(() => {
       setLoadedSubtitleUrls(autoSubtitles);      
       // 如果有多个字幕,添加切换选项  
       artPlayerRef.current.setting.add({  
-        html: '字幕',  
+        html: '外部字幕',  
         tooltip: autoSubtitles.length > 0 ? `当前:${autoSubtitles[0].filename}` : '当前:关闭',  
         icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',  
         selector: [  
@@ -4156,6 +4100,94 @@ useEffect(() => {
 
     loadAndInit();
   }, [Hls, videoUrl, loading, blockAdEnabled]);
+// 🚀 修复：监听加载到的字幕 URL 变化，并重新加载 ArtPlayer 的字幕设置
+  // -----------------------------------------------------------------------------
+  useEffect(() => {
+    const art = artPlayerRef.current;
+    const autoSubtitles = loadedSubtitleUrls; // 包含新集数的字幕信息
+
+    if (art) {
+      console.log(`🎬 ArtPlayer 字幕设置更新: 检测到 ${autoSubtitles.length} 条字幕`);
+      
+      // 1. 尝试移除旧的 '外部字幕' 设置项
+      try {
+        // 移除旧的设置项，防止重复
+        if (art.setting) {
+            // 如果有 API 支持移除更好，否则手动操作数组
+            const settings = art.setting.option; // 注意：ArtPlayer 这里的属性可能是 option 而不是 settings，根据你现有代码 Snippet 1318 调整
+            const subtitleIndex = settings.findIndex((item: any) => item.html === '外部字幕');
+            if (subtitleIndex !== -1) {
+                settings.splice(subtitleIndex, 1);
+                console.log('✅ 旧的外部字幕设置项已移除');
+            }
+            // 强制刷新设置菜单 UI (如果需要，通常 add 会触发刷新)
+        }
+      } catch (error) {
+        console.warn('清理旧字幕设置失败:', error);
+      }
+
+      // 2. 如果之前有字幕显示，先暂时关闭，防止残留
+      // art.subtitle.show = false; 
+
+      if (autoSubtitles.length > 0) {
+        const firstSub = autoSubtitles[0];
+
+        // 3. 重新添加新的字幕设置项
+        art.setting.add({
+          html: '外部字幕',
+          tooltip: `当前:${firstSub.filename}`,
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',
+          selector: [
+            {
+              html: '关闭',
+              value: 'off',
+            },
+            ...autoSubtitles.map((sub) => ({
+              html: sub.filename,
+              value: sub.url,
+              subtitle: {
+                url: sub.url,
+                type: sub.type,
+              },
+            })),
+          ],
+          onSelect: function (item: any) {
+            if (item.value === 'off') {
+              if (art) {
+                art.subtitle.show = false;
+              }
+              return '关闭';
+            }
+
+            if (art) {
+              art.subtitle.switch(item.subtitle.url, {
+                type: item.subtitle.type,
+              });
+              art.subtitle.show = true;
+            }
+            return item.html;
+          },
+        });
+
+        // 4. 强制切换到新的字幕轨道
+        // 使用 setTimeout 确保在 UI 更新后执行
+        setTimeout(() => {
+            if(art && art.subtitle) {
+                art.subtitle.switch(firstSub.url, { type: firstSub.type });
+                art.subtitle.show = true;
+                art.notice.show = `已加载字幕: ${firstSub.filename}`;
+                console.log('✅ 字幕已强制切换到:', firstSub.filename);
+            }
+        }, 100);
+
+      } else {
+        console.log('📭 新集数未检测到字幕文件');
+        if (art && art.subtitle) {
+            art.subtitle.show = false;
+        }
+      }
+    }
+  }, [loadedSubtitleUrls]); // 仅监听 loadedSubtitleUrls 变化
 
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {
