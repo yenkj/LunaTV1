@@ -95,6 +95,7 @@ function PlayPageClient() {
 
   // 🔑 添加 banana seek 定时器 ref
   const bananaSeekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const bananaMetadataAbortRef = useRef<AbortController | null>(null);
 
   // resize事件防抖管理
   const resizeResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
