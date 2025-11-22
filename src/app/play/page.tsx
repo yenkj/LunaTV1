@@ -277,7 +277,11 @@ function PlayPageClient() {
   const [videoUrl, setVideoUrl] = useState('');
   // 获取 banana 元数据
 useEffect(() => {
-  const fetchBananaMetadata = async () => {
+	  console.log('🔍 [元数据] useEffect 触发:', {  
+    source: detail?.source,  
+    videoUrl: videoUrl  
+  });  
+  const fetchBananaMetadata = async () => { 
     if (detail?.source !== 'banana' || !videoUrl) return;
     
     const match = videoUrl.match(/\/[rt]\/([^.]+)/);
@@ -292,7 +296,7 @@ useEffect(() => {
     }
 
     bananaMetadataAbortRef.current = new AbortController()
-
+    console.log('🔍 [元数据] 开始获取元数据:', fileId);
     try {
       const response = await fetch(`http://us.199301.xyz:4000/info/${fileId}`,  
         { signal: bananaMetadataAbortRef.current.signal }  // 🔑 添加 signal
@@ -395,6 +399,9 @@ useEffect(() => {
   };
 
   fetchBananaMetadata();
+  return () => {  
+    console.log('🔍 [元数据] useEffect 清理');  
+  }; 
 }, [detail?.source, videoUrl]);
   // 总集数
   const totalEpisodes = detail?.episodes?.length || 0;
