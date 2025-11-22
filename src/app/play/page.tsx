@@ -1394,7 +1394,11 @@ useEffect(() => {
     
     // 清理弹幕状态引用
     danmuPluginStateRef.current = null;
-    
+
+    if (artPlayerRef.current) {
+      try {
+        // 👇 在这里添加 video 元素清理,用于停止转码
+        const video = artPlayerRef.current.video as HTMLVideoElement; 
     if (video) {
 		console.log('🔍 [清理] video 元素状态:', {  
     src: video.src,  
