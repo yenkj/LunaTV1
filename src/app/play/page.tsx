@@ -3574,13 +3574,14 @@ useEffect(() => {
         setError(null);
   // 监听所有可能的 URL 变化  
   const originalSwitchQuality = artPlayerRef.current.switchQuality;  
-  artPlayerRef.current.switchQuality = function(...args) {  
-    console.log('🔔 [监控] switchQuality 被调用:', {  
-      url: args[0],
-      stack: new Error().stack  
-    });
-    return originalSwitchQuality.apply(this, args);  
-  };
+artPlayerRef.current.switchQuality = function(...args: any[]) {    
+  console.log('🔔 [监控] switchQuality 被调用:', {    
+    url: args[0],  
+    timestamp: new Date().getTime(),  
+    stack: new Error().stack    
+  });  
+  return originalSwitchQuality.apply(this, args);    
+};
         // iOS设备自动播放优化：如果是静音启动的，在开始播放后恢复音量
         if ((isIOS || isSafari) && artPlayerRef.current.muted) {
           console.log('iOS设备静音自动播放，准备在播放开始后恢复音量');
