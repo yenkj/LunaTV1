@@ -46,8 +46,8 @@ interface WakeLockSentinel {
 function PlayPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [loadedSubtitleUrls, setLoadedSubtitleUrls] = useState<Array<{ url: string; type: string; filename: string }>>([]);  
-  // 🆕 添加独立的字幕检测状态  
+  const [loadedSubtitleUrls, setLoadedSubtitleUrls] = useState<Array<{ url: string; type: string; filename: string }>>([]);
+  // 🆕 添加独立的字幕检测状态
   const [independentSubtitles, setIndependentSubtitles] = useState<Array<{ url: string; type: string }>>([]);
   // -----------------------------------------------------------------------------
   // 状态变量（State）
@@ -108,7 +108,11 @@ function PlayPageClient() {
   useEffect(() => {
     blockAdEnabledRef.current = blockAdEnabled;
   }, [blockAdEnabled]);
-
+  const [bananaMetadata, setBananaMetadata] = useState<{
+    duration: number;
+    audioTracks: any[];
+    subtitleTracks: any[];
+  } | null>(null);
   // 外部弹幕开关（从 localStorage 继承，默认全部关闭）
   const [externalDanmuEnabled, setExternalDanmuEnabled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -267,7 +271,109 @@ function PlayPageClient() {
 
   // 视频播放地址
   const [videoUrl, setVideoUrl] = useState('');
-
+  // 获取 banana 元数据
+useEffect(() => {
+  const fetchBananaMetadata = async () => {
+    if (detail?.source !== 'banana' || !videoUrl) return;
+    
+    const match = videoUrl.match(/\/[rt]\/([^.]+)/);
+    if (!match) return;
+      
+    const fileId = match[1];
+    console.log('🔍 正在获取 banana 元数据:', fileId);
+    
+    try {
+      const response = await fetch(`http://us.199301.xyz:4000/info/${fileId}`);
+      const data = await response.json();
+      setBananaMetadata(data);
+      console.log('✅ Banana 元数据获取成功:', data);
+      if (artPlayerRef.current && data.subtitleTracks && data.subtitleTracks.length > 0) {
+      console.log('📝 添加内嵌字幕选择器');
+      
+      // 先检查是否已经存在内嵌字幕选择器,避免重复添加
+      const settings = artPlayerRef.current.setting.option;
+      const hasEmbeddedSubtitle = settings.some((s: any) => s.html === '内嵌字幕');
+        
+      if (!hasEmbeddedSubtitle) {
+        const match = videoUrl.match(/\/[rt]\/([^.]+)/);
+        if (match) {
+          const fileId = match[1];
+          
+          artPlayerRef.current.setting.add({
+            html: '内嵌字幕',
+            tooltip: '选择字幕',
+            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',
+            selector: [
+              { html: '关闭', value: 'off' },
+              ...data.subtitleTracks.map((track: any, index: number) => ({
+                html: track.tags?.title || track.tags?.language || `字幕 ${index + 1}`,
+                value: index,
+                subtitle: {
+                  url: `http://us.199301.xyz:4000/s/${fileId}.${index}.srt`,
+                  type: 'srt',
+                },
+              })),
+            ],
+            onSelect: function (item: any) {
+              if (item.value === 'off') {
+                artPlayerRef.current.subtitle.show = false;
+                return '关闭';
+              }
+              console.log(`📝 加载内嵌字幕: ${item.html}`);
+              artPlayerRef.current.subtitle.switch(item.subtitle.url, {
+                type: item.subtitle.type,
+              });
+              artPlayerRef.current.subtitle.show = true;
+              return item.html;
+            },
+          });
+        }
+      }
+    }
+      // 👇 在这里添加选择器,确保播放器已初始化
+      if (artPlayerRef.current && data.audioTracks && data.audioTracks.length > 1) {
+        console.log('🎵 添加音轨选择器');
+        
+        artPlayerRef.current.setting.add({
+          html: '音轨',
+          tooltip: '选择音轨',
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
+          selector: data.audioTracks.map((track: any, index: number) => ({
+            html: track.tags?.language || track.tags?.title || `音轨 ${index + 1}`,
+            value: index,
+          })),
+          onSelect: function (item: any) {
+            const baseUrl = videoUrl.split('?')[0];
+            const params = new URLSearchParams(videoUrl.split('?')[1] || '');
+            params.set('audio', item.value.toString());
+            const newUrl = `${baseUrl}?${params.toString()}`;
+            
+            console.log(`🎵 切换音轨: ${item.html} (${item.value})`);
+            artPlayerRef.current.switchQuality(newUrl);
+            return item.html;
+          },
+        });
+      }
+      
+      // 设置视频时长
+      if (artPlayerRef.current && data.duration) {
+        const video = artPlayerRef.current.video as HTMLVideoElement;
+        if (video.duration === Infinity || isNaN(video.duration)) {
+          Object.defineProperty(video, 'duration', {
+            value: data.duration,
+            writable: false
+          });
+          console.log(`✅ 修正视频时长: ${data.duration}秒`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ 获取 banana 元数据失败:', error);
+    }
+  };
+  
+  fetchBananaMetadata();
+}, [detail?.source, videoUrl]);
   // 总集数
   const totalEpisodes = detail?.episodes?.length || 0;
 
@@ -298,53 +404,59 @@ function PlayPageClient() {
     return false;
   });
 
-  // 根据视频 URL 生成可能的字幕 URL  
-  const generateSubtitleUrls = (videoUrl: string): string[] => {  
-    const subtitleUrls: string[] = [];  
+  // 根据视频 URL 生成可能的字幕 URL
+  const generateSubtitleUrls = (videoUrl: string): string[] => {
+    const subtitleUrls: string[] = [];
+    
+    // 如果是 /t/ 端点,先转换回 /r/ 端点
+    let baseUrl = videoUrl;
+    if (baseUrl.includes('/t/')) {
+      baseUrl = baseUrl.replace('/t/', '/r/');
+    }
 
-    // 移除视频文件扩展名  
-    const baseUrl = videoUrl.replace(/\.(mkv|mp4|avi|flv|wmv|mov|m3u8)$/i, '');  
+    // 移除视频文件扩展名
+    baseUrl = baseUrl.replace(/\.(mkv|mp4|avi|flv|wmv|mov|m3u8)$/i, '');
 
-    // 生成可能的字幕文件 URL  
-    subtitleUrls.push(`${baseUrl}.chs.srt`);  
-    subtitleUrls.push(`${baseUrl}.chs.ass`);  
-    subtitleUrls.push(`${baseUrl}.chs.vtt`);  
+    // 生成字幕 URL
+    subtitleUrls.push(`${baseUrl}.chs.srt`);
+    subtitleUrls.push(`${baseUrl}.chs.ass`);
+    subtitleUrls.push(`${baseUrl}.chs.vtt`);
 
-    return subtitleUrls;  
-  };  
+    return subtitleUrls;
+  };
 
-  // 检查字幕文件是否存在  
-  const checkSubtitleExists = async (url: string): Promise<boolean> => {  
-    try {  
-      const response = await fetch(url, { method: 'HEAD' });  
-      return response.ok;  
-    } catch {  
-      return false;  
-    }  
-  };  
+  // 检查字幕文件是否存在
+  const checkSubtitleExists = async (url: string): Promise<boolean> => {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  };
 
-  // 自动检测并加载字幕  
-  const autoLoadSubtitles = async (videoUrl: string): Promise<Array<{ url: string; type: string; filename: string }>> => {  
-    const possibleUrls = generateSubtitleUrls(videoUrl);  
-    const availableSubtitles: Array<{ url: string; type: string; filename: string }> = [];  
+  // 自动检测并加载字幕
+  const autoLoadSubtitles = async (videoUrl: string): Promise<Array<{ url: string; type: string; filename: string }>> => {
+    const possibleUrls = generateSubtitleUrls(videoUrl);
+    const availableSubtitles: Array<{ url: string; type: string; filename: string }> = [];
 
-    // 并发检查所有可能的字幕文件  
-    const checks = possibleUrls.map(async (url) => {  
-      const exists = await checkSubtitleExists(url);  
-      if (exists) {  
-        const ext = url.split('.').pop()?.toLowerCase() || 'srt';  
-        const type = ext === 'vtt' ? 'webvtt' : ext;  
-        const filename = url.split('/').pop() || '';  
-        availableSubtitles.push({   
-          url,   
-          type,  
-          filename: decodeURIComponent(filename)  
-        });  
-      }  
-    });  
+    // 并发检查所有可能的字幕文件
+    const checks = possibleUrls.map(async (url) => {
+      const exists = await checkSubtitleExists(url);
+      if (exists) {
+        const ext = url.split('.').pop()?.toLowerCase() || 'srt';
+        const type = ext === 'vtt' ? 'webvtt' : ext;
+        const filename = url.split('/').pop() || '';
+        availableSubtitles.push({
+          url,
+          type,
+          filename: decodeURIComponent(filename)
+        });
+      }
+    });
 
-    await Promise.all(checks);  
-    return availableSubtitles;  
+    await Promise.all(checks);
+    return availableSubtitles;
   };
   // 保存优选时的测速结果，避免EpisodeSelector重复测速
   const [precomputedVideoInfo, setPrecomputedVideoInfo] = useState<
@@ -1088,7 +1200,22 @@ function PlayPageClient() {
       }
     } else {
       // 普通视频格式
-      const newUrl = episodeData || '';
+      let newUrl = episodeData || '';  // ✅ 改为 let
+
+      // 🎬 添加转码逻辑: 如果是 banana 源且是 /r/ 端点,转换为 /t/ 转码端点
+      if (detailData.source === 'banana' && newUrl.includes('/r/')) {
+        const match = newUrl.match(/\/r\/([^.]+)\.(\w+)/);
+        if (match) {
+          const [, fileId, extension] = match;
+          const needsTranscode = ['mkv', 'avi', 'flv', 'webm', 'mov'].includes(extension.toLowerCase());
+          
+          if (needsTranscode) {
+            newUrl = newUrl.replace(/\/r\/([^.]+)\.\w+/, '/t/$1.mp4');
+            console.log(`🎬 [转码] 将 ${episodeData} 转换为 ${newUrl}`);
+          }
+        }
+      }
+
       if (newUrl !== videoUrl) {
         setVideoUrl(newUrl);
       }
@@ -1223,6 +1350,16 @@ function PlayPageClient() {
     
     if (artPlayerRef.current) {
       try {
+        // 👇 在这里添加 video 元素清理,用于停止转码
+        const video = artPlayerRef.current.video as HTMLVideoElement;
+
+        // 中止所有网络请求
+        if (video) {
+          video.pause();
+          video.src = '';
+          video.load(); // 触发中止
+          console.log('🛑 已中止视频加载');
+        }
         // 1. 清理弹幕插件的WebWorker
         if (artPlayerRef.current.plugins?.artplayerPluginDanmuku) {
           const danmukuPlugin = artPlayerRef.current.plugins.artplayerPluginDanmuku;
@@ -1655,26 +1792,24 @@ function PlayPageClient() {
         }
       }, 800); // 缩短延迟时间，提高响应性
     }
-
-    // 🆕 集数变化时重新检测字幕
-    if (artPlayerRef.current && !isSourceChangingRef.current) {
-      // 立即执行字幕加载，确保视频URL已更新
-      console.log('🔄 集数变化,重新检测字幕...');
-      try {
-        const autoSubtitles = await autoLoadSubtitles(videoUrl);
-        if (autoSubtitles.length > 0) {
-          console.log('✅ 新集数检测到字幕:', autoSubtitles);
-          setLoadedSubtitleUrls(autoSubtitles); // 更新字幕 URL
-        } else {
-          console.log('📭 新集数未检测到字幕文件');
-          if (artPlayerRef.current) {
-            artPlayerRef.current.subtitle.show = false;
-          }
-        }
-      } catch (error) {
-        console.warn('⚠️ 集数切换后字幕检测失败:', error);
-      }
-    }
+	// 🆕 集数变化时重新检测字幕  
+	if (artPlayerRef.current && !isSourceChangingRef.current) {  
+	  console.log('🔄 集数变化,重新检测字幕...');  
+	  try {  
+		const autoSubtitles = await autoLoadSubtitles(videoUrl);  
+		if (autoSubtitles.length > 0) {  
+		  console.log('✅ 新集数检测到字幕:', autoSubtitles);  
+		  setLoadedSubtitleUrls(autoSubtitles);  
+		} else {  
+		  console.log('📭 新集数未检测到字幕文件');  
+		  if (artPlayerRef.current) {  
+			artPlayerRef.current.subtitle.show = false;  
+		  }  
+		}  
+	  } catch (error) {  
+		console.warn('⚠️ 集数切换后字幕检测失败:', error);  
+	  }  
+	}
   }, [detail, currentEpisodeIndex, videoUrl]); // 添加 videoUrl 依赖
 
   // 进入页面时直接获取全部源信息
@@ -2604,42 +2739,107 @@ function PlayPageClient() {
       console.error('切换收藏失败:', err);
     }
   };
-// 🆕 独立的字幕检测 - 不依赖播放器加载状态  
-useEffect(() => {    
-  const detectSubtitlesIndependently = async () => {    
-    const bananaSource = availableSources.find(source => source.source === 'banana');    
-    if (!bananaSource) return;    
-        
-    const bananaVideoUrl = bananaSource.episodes?.[currentEpisodeIndex] || '';    
-    if (!bananaVideoUrl) return;    
-        
-    try {    
-      const baseUrl = bananaVideoUrl.replace(/\.(mkv|mp4|avi|flv|wmv|mov|m3u8)$/i, '');    
-      const subtitleUrls = [    
-        { url: `${baseUrl}.chs.srt`, type: 'SRT' },    
-        { url: `${baseUrl}.chs.ass`, type: 'ASS' }    
-      ];    
+// 🆕 独立的字幕检测 - 不依赖播放器加载状态
+useEffect(() => {
+  const detectSubtitlesIndependently = async () => {
+    const bananaSource = availableSources.find(source => source.source === 'banana');
+    if (!bananaSource) return;
+    
+    const bananaVideoUrl = bananaSource.episodes?.[currentEpisodeIndex] || '';
+    if (!bananaVideoUrl) return;
+    
+    try {
+      const baseUrl = bananaVideoUrl.replace(/\.(mkv|mp4|avi|flv|wmv|mov|m3u8)$/i, '');
+      const subtitleUrls = [
+        { url: `${baseUrl}.chs.srt`, type: 'SRT' },
+        { url: `${baseUrl}.chs.ass`, type: 'ASS' }
+      ];
           
-      const available = [];    
-      for (const sub of subtitleUrls) {    
-        try {    
-          const response = await fetch(sub.url, { method: 'HEAD' });    
-          if (response.ok) {    
-            available.push(sub);    
-          }    
-        } catch {    
-          // 忽略错误    
-        }    
-      }    
-          
-      setIndependentSubtitles(available);    
-    } catch (error) {    
-      console.warn('独立字幕检测失败:', error);    
-    }    
-  };    
+      const available = [];
+      for (const sub of subtitleUrls) {
+        try {
+          const response = await fetch(sub.url, { method: 'HEAD' });
+          if (response.ok) {
+            available.push(sub);
+          }
+        } catch {
+          // 忽略错误
+        }
+      }
+
+      setIndependentSubtitles(available);
+    } catch (error) {
+      console.warn('独立字幕检测失败:', error);
+    }
+  };
+  
+  detectSubtitlesIndependently();
+}, [availableSources, currentEpisodeIndex]);
+//添加 V8 修复的 useEffect
+useEffect(() => {  
+  const art = artPlayerRef.current;  
+  const autoSubtitles = loadedSubtitleUrls;  
+  
+  if (art && autoSubtitles.length > 0) {  
+    console.log(`🎬 [V8] 准备强制刷新字幕设置...`);  
       
-  detectSubtitlesIndependently();    
-}, [availableSources, currentEpisodeIndex]);  
+    const timer = setTimeout(() => {  
+      try {  
+        const firstSub = autoSubtitles[0];  
+          
+        const newSubtitleOption = {  
+          html: '外部字幕',  
+          name: 'external_subs',  
+          tooltip: `当前: ${firstSub.filename}`,  
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',  
+          selector: [  
+            { html: '关闭', value: 'off' },  
+            ...autoSubtitles.map((sub) => ({  
+              html: sub.filename,  
+              value: sub.url,  
+              subtitle: { url: sub.url, type: sub.type },  
+            })),  
+          ],  
+          onSelect: function (item: any) {  
+            if (item.value === 'off') {  
+              art.subtitle.show = false;  
+              return '关闭';  
+            }  
+            art.subtitle.switch(item.subtitle.url, { type: item.subtitle.type });  
+            art.subtitle.show = true;  
+            return item.html;  
+          },  
+        };  
+  
+        const cleanOptions = art.setting.option.filter(  
+          (item: any) => item.html !== '外部字幕'  
+        );  
+        cleanOptions.push(newSubtitleOption);  
+        // @ts-ignore  
+        art.setting.option = [...cleanOptions];  
+          
+        if (art.subtitle.url !== firstSub.url) {  
+          art.subtitle.switch(firstSub.url, { type: firstSub.type });  
+          art.subtitle.show = true;  
+          art.notice.show = `已加载字幕: ${firstSub.filename}`;  
+        }  
+      } catch (error) {  
+        console.warn('⚠️ [V8] 字幕设置更新异常:', error);  
+      }  
+    }, 0);  
+  
+    return () => clearTimeout(timer);  
+  } else if (art && autoSubtitles.length === 0) {  
+    art.subtitle.show = false;  
+    const cleanOptions = art.setting.option.filter(  
+      (item: any) => item.html !== '外部字幕'  
+    );  
+    if (cleanOptions.length !== art.setting.option.length) {  
+      // @ts-ignore  
+      art.setting.option = [...cleanOptions];  
+    }  
+  }  
+}, [loadedSubtitleUrls, artPlayerRef.current]);
   useEffect(() => {
     // 异步初始化播放器，避免SSR问题
     const initPlayer = async () => {
@@ -2849,16 +3049,16 @@ useEffect(() => {
         fastForward: true,
         autoOrientation: true,
         lock: true,
-        // 🆕 添加字幕配置  
-        subtitle: {  
-        url: '',  
-        type: 'srt',  
-        style: {  
-        color: '#fff',  
-        fontSize: '20px',  
-        },  
-        encoding: 'utf-8',  
-        },   
+        // 🆕 添加字幕配置
+        subtitle: {
+        url: '',
+        type: 'srt',
+        style: {
+        color: '#fff',
+        fontSize: '20px',
+        },
+        encoding: 'utf-8',
+        },
         // AirPlay 仅在支持 WebKit API 的浏览器中启用
         // 主要是 Safari (桌面和移动端) 和 iOS 上的其他浏览器
         airplay: isIOS || isSafari,
@@ -3351,68 +3551,21 @@ useEffect(() => {
         
         // 应用CSS优化
         optimizeDanmukuControlsCSS();
-  // 🆕 自动检测并加载字幕  
-  try {  
-    console.log('🔍 开始检测字幕文件...');  
-    const autoSubtitles = await autoLoadSubtitles(videoUrl);  
-      
-    if (autoSubtitles.length > 0) {  
-      console.log('✅ 检测到字幕文件:', autoSubtitles);  
-        // 🆕 保存已加载的字幕 URL  
-      setLoadedSubtitleUrls(autoSubtitles);      
-      // 如果有多个字幕,添加切换选项  
-      artPlayerRef.current.setting.add({  
-        html: '外部字幕',  
-        tooltip: autoSubtitles.length > 0 ? `当前:${autoSubtitles[0].filename}` : '当前:关闭',  
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',  
-        selector: [  
-          {  
-            html: '关闭',  
-            value: 'off',  
-          },  
-          ...autoSubtitles.map((sub) => ({  
-            html: sub.filename,  
-            value: sub.url,  
-            subtitle: {  
-              url: sub.url,  
-              type: sub.type,  
-            },  
-          })),  
-        ],  
-        onSelect: function (item: any) {  
-          if (item.value === 'off') {  
-            if (artPlayerRef.current) {  
-              artPlayerRef.current.subtitle.show = false;  
-            }  
-            return '关闭';  
-          }  
-            
-          if (artPlayerRef.current) {  
-            artPlayerRef.current.subtitle.switch(item.subtitle.url, {  
-              type: item.subtitle.type,  
-            });  
-            artPlayerRef.current.subtitle.show = true;  
-          }  
-          return item.html;  
-        },  
-      });  
-        
-      // 默认加载第一个检测到的字幕  
-      const firstSub = autoSubtitles[0];  
-      artPlayerRef.current.subtitle.switch(firstSub.url, {  
-        type: firstSub.type,  
-      });  
-      console.log('✅ 已自动加载字幕:', firstSub.filename);  
-        
-      if (artPlayerRef.current) {  
-        artPlayerRef.current.notice.show = `已加载字幕: ${firstSub.filename}`;  
-      }  
-    } else {  
-      console.log('📭 未检测到字幕文件');  
-    }  
-  } catch (error) {  
-    console.warn('⚠️ 自动加载字幕失败:', error);  
-  }
+
+// 🆕 自动检测并加载字幕  
+try {  
+  console.log('🔍 开始检测字幕文件...');  
+  const autoSubtitles = await autoLoadSubtitles(videoUrl);  
+    
+  if (autoSubtitles.length > 0) {  
+    console.log('✅ 检测到字幕文件:', autoSubtitles);  
+    setLoadedSubtitleUrls(autoSubtitles);  
+  } else {  
+    console.log('📭 未检测到字幕文件');  
+  }  
+} catch (error) {  
+  console.warn('⚠️ 自动加载字幕失败:', error);  
+}
         // 精确解决弹幕菜单与进度条拖拽冲突 - 基于ArtPlayer原生拖拽逻辑
         const fixDanmakuProgressConflict = () => {
           let isDraggingProgress = false;
@@ -3756,7 +3909,26 @@ useEffect(() => {
             }, 500); // 增加到500ms延迟，减少频繁重置导致的闪烁
           }
         });
+        // 👇 添加防抖优化的 banana 转码 seek 支持
+        let seekTimeout: NodeJS.Timeout | null = null;
 
+        artPlayerRef.current.on('seek', (currentTime: number) => {
+          if (detail?.source === 'banana' && videoUrl.includes('/t/')) {
+            // 清除之前的定时器,避免频繁触发
+            if (seekTimeout) clearTimeout(seekTimeout);
+            
+            // 延迟 500ms 执行,只在用户停止拖动后才重新加载
+            seekTimeout = setTimeout(() => {
+              const baseUrl = videoUrl.split('?')[0];
+              const params = new URLSearchParams(videoUrl.split('?')[1] || '');
+              params.set('start', currentTime.toString());
+                
+              const newUrl = `${baseUrl}?${params.toString()}`;
+              console.log(`⏩ 跳转到 ${currentTime.toFixed(2)}s`);
+              artPlayerRef.current.switchQuality(newUrl);
+            }, 500);
+          }
+        });
         // 监听拖拽状态 - v5.2.0优化: 在拖拽期间暂停弹幕更新以减少闪烁
         artPlayerRef.current.on('video:seeking', () => {
           isDraggingProgressRef.current = true;
@@ -4094,89 +4266,6 @@ useEffect(() => {
 
     loadAndInit();
   }, [Hls, videoUrl, loading, blockAdEnabled]);
-// -----------------------------------------------------------------------------
-  // 🚀 修复 V8：延迟到下一事件循环 (setTimeout 0)，确保 ArtPlayer DOM 稳定后再更新 UI
-  // -----------------------------------------------------------------------------
-  useEffect(() => {
-    const art = artPlayerRef.current;
-    const autoSubtitles = loadedSubtitleUrls;
-
-    if (art && autoSubtitles.length > 0) {
-      console.log(`🎬 [V8] 准备强制刷新字幕设置 (延迟 0ms 执行, ${autoSubtitles.length} 个文件)...`);
-
-      // 延迟 0ms，确保在 ArtPlayer 完成当前 tick 的所有 DOM 操作后再执行
-      // 这是解决第三方库顽固 UI 缓存的最可靠方法之一。
-      const timer = setTimeout(() => {
-        try {
-          const firstSub = autoSubtitles[0];
-          
-          // 1. 构造全新的配置对象
-          const newSubtitleOption = {
-            html: '外部字幕',
-            name: 'external_subs',
-            tooltip: `当前: ${firstSub.filename}`, // 核心显示文本
-            icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',
-            selector: [
-              { html: '关闭', value: 'off' },
-              ...autoSubtitles.map((sub) => ({
-                html: sub.filename,
-                value: sub.url,
-                subtitle: { url: sub.url, type: sub.type },
-              })),
-            ],
-            onSelect: function (item: any) {
-              if (item.value === 'off') {
-                art.subtitle.show = false;
-                return '关闭';
-              }
-              art.subtitle.switch(item.subtitle.url, { type: item.subtitle.type });
-              art.subtitle.show = true;
-              return item.html;
-            },
-          };
-
-          // 2. 💥 暴力移除：过滤掉所有名为“外部字幕”的旧项
-          const cleanOptions = art.setting.option.filter(
-              (item: any) => item.html !== '外部字幕'
-          );
-
-          // 3. 将新项加入到干净数组中
-          cleanOptions.push(newSubtitleOption);
-
-          // 4. 💥 整体赋值：强制 ArtPlayer 重绘，使用扩展运算符确保是新数组引用
-          // @ts-ignore
-          art.setting.option = [...cleanOptions]; 
-          
-          console.log(`✅ [V8] 字幕菜单 UI 已强制重构，Tooltip应为: ${firstSub.filename}`);
-
-          // 5. 确保当前轨道是正确的
-          if (art.subtitle.url !== firstSub.url) {
-             console.log(`✅ [V8] 强制切换轨道至: ${firstSub.filename}`);
-             art.subtitle.switch(firstSub.url, { type: firstSub.type });
-             art.subtitle.show = true;
-             art.notice.show = `已加载字幕: ${firstSub.filename}`;
-          }
-
-        } catch (error) {
-          console.warn('⚠️ [V8] 字幕设置更新异常:', error);
-        }
-      }, 0); // 0ms 延迟，关键所在！
-
-      return () => clearTimeout(timer);
-    } 
-    else if (art && autoSubtitles.length === 0) {
-        // 清理逻辑 (无字幕时彻底移除菜单项)
-        art.subtitle.show = false;
-        const cleanOptions = art.setting.option.filter(
-            (item: any) => item.html !== '外部字幕'
-        );
-        if (cleanOptions.length !== art.setting.option.length) {
-            // @ts-ignore
-            art.setting.option = [...cleanOptions];
-            console.log('✅ [V8] 无字幕，已从菜单中移除外部字幕项。');
-        }
-    }
-  }, [loadedSubtitleUrls, artPlayerRef.current]);
 
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {
@@ -4676,194 +4765,194 @@ useEffect(() => {
                         )}
                       </div>
                     </button>
-{/* 第三方播放器按钮组 - 与网盘资源按钮对齐 */}  
-{(() => {  
-  const bananaSource = availableSources.find(source => source.source === 'banana');  
-  if (!bananaSource) return null;  
+{/* 第三方播放器按钮组 - 与网盘资源按钮对齐 */}
+{(() => {
+  const bananaSource = availableSources.find(source => source.source === 'banana');
+  if (!bananaSource) return null;
   
-  const bananaVideoUrl = bananaSource.episodes?.[currentEpisodeIndex] || '';  
-  if (!bananaVideoUrl) return null;  
+  const bananaVideoUrl = bananaSource.episodes?.[currentEpisodeIndex] || '';
+  if (!bananaVideoUrl) return null;
   
-  const convertVideoUrl = (url: string): string => {  
-    // 直接返回原地址,不做任何转换  
-    return url;  
-  };  
+  const convertVideoUrl = (url: string): string => {
+    // 直接返回原地址,不做任何转换
+    return url;
+  };
   
-  const convertedUrl = convertVideoUrl(bananaVideoUrl);    
+  const convertedUrl = convertVideoUrl(bananaVideoUrl);
   
-  // 操作系统检测函数          
-  const getOS = () => {          
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;                 
-    if (/android/i.test(userAgent)) return "Android";          
-    if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) return "iOS";          
-    if (/Mac/.test(userAgent)) return "macOS";          
-    if (/Win/.test(userAgent)) return "Windows";          
-    return "Unknown";          
-  };          
+  // 操作系统检测函数
+  const getOS = () => {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    if (/android/i.test(userAgent)) return "Android";
+    if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) return "iOS";
+    if (/Mac/.test(userAgent)) return "macOS";
+    if (/Win/.test(userAgent)) return "Windows";
+    return "Unknown";
+  };
   
-  const os = getOS();        
+  const os = getOS();
   
-  // 预计算各平台的播放器 URL  
-  const vlcUrl = (() => {  
-    switch (os) {  
-      case 'Windows': return `vlc://${encodeURI(convertedUrl)}`;  
-      case 'iOS': return `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(convertedUrl)}`;  
-      case 'Android': return `intent:${encodeURI(convertedUrl)}#Intent;package=org.videolan.vlc;type=video/*;end`;  
-      default: return `vlc://${encodeURI(convertedUrl)}`;  
-    }  
-  })();  
+  // 预计算各平台的播放器 URL
+  const vlcUrl = (() => {
+    switch (os) {
+      case 'Windows': return `vlc://${encodeURI(convertedUrl)}`;
+      case 'iOS': return `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(convertedUrl)}`;
+      case 'Android': return `intent:${encodeURI(convertedUrl)}#Intent;package=org.videolan.vlc;type=video/*;end`;
+      default: return `vlc://${encodeURI(convertedUrl)}`;
+    }
+  })();
   
-  const nplayerUrl = os === 'macOS'   
-    ? `nplayer-mac://weblink?url=${encodeURIComponent(convertedUrl)}&new_window=1`  
-    : `nplayer-${encodeURI(convertedUrl)}`;  
+  const nplayerUrl = os === 'macOS'
+    ? `nplayer-mac://weblink?url=${encodeURIComponent(convertedUrl)}&new_window=1`
+    : `nplayer-${encodeURI(convertedUrl)}`;
   
-  return (              
-    <div className="flex items-center gap-2">              
-      {/* IINA - macOS 和未知平台 */}              
-      {(os === 'macOS' || os === 'Unknown') && (        
-        <a  
-          href={`iina://weblink?url=${encodeURIComponent(convertedUrl)}&new_window=1`}  
-          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"              
-        >              
-          <img               
-            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-IINA.webp"               
-            alt="IINA"              
-            className="w-5 h-5"              
-          />              
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">              
-            IINA               
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>              
-          </div>              
-        </a>        
-      )}        
-  
-      {/* PotPlayer - Windows 和未知平台 */}              
-      {(os === 'Windows' || os === 'Unknown') && (        
-        <a  
-          href={`potplayer://${encodeURI(convertedUrl)}`}  
-          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"              
-        >              
-          <img               
-            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-PotPlayer.webp"               
-            alt="PotPlayer"              
-            className="w-5 h-5"              
-          />              
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">              
-            PotPlayer               
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>              
-          </div>              
-        </a>        
-      )}        
-  
-      {/* VLC - 所有平台 */}              
-      <a  
-        href={vlcUrl}  
-        className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"              
-      >              
-        <img               
-          src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-VLC.webp"               
-          alt="VLC"              
-          className="w-5 h-5"              
-        />              
-        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">              
-          VLC               
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>              
-        </div>              
-      </a>  
-  
-      {/* Infuse - iOS 和未知平台 */}      
-      {(os === 'iOS' || os === 'Unknown') && (      
-        <a  
-          href={`infuse://x-callback-url/play?url=${encodeURIComponent(convertedUrl)}`}  
-          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"      
-        >      
-          <img      
-            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-infuse.webp"      
-            alt="Infuse"      
-            className="w-5 h-5"      
-          />      
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">      
-            Infuse      
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>      
-          </div>      
-        </a>      
-      )}      
-  
-      {/* nPlayer - macOS、移动端和未知平台 */}              
-      {(os === 'macOS' || os === 'iOS' || os === 'Android' || os === 'Unknown') && (        
-        <a  
-          href={nplayerUrl}  
-          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"              
-        >              
-          <img               
-            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-NPlayer.webp"               
-            alt="nPlayer"              
-            className="w-5 h-5"              
-          />              
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">              
-            nPlayer               
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>              
-          </div>              
-        </a>        
-      )}        
-  
-      {/* MXPlayer - Android 和未知平台 */}      
-      {(os === 'Android' || os === 'Unknown') && (      
-        <a  
+  return (
+    <div className="flex items-center gap-2">
+      {/* IINA - macOS 和未知平台 */}
+      {(os === 'macOS' || os === 'Unknown') && (
+        <a
+          href={`iina://weblink?url=${encodeURIComponent(convertedUrl)}&new_window=1`}
+          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"
+        >
+          <img
+            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-IINA.webp"
+            alt="IINA"
+            className="w-5 h-5"
+          />
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">
+            IINA
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </a>
+      )}
+      
+      {/* PotPlayer - Windows 和未知平台 */}
+      {(os === 'Windows' || os === 'Unknown') && (
+        <a
+          href={`potplayer://${encodeURI(convertedUrl)}`}
+          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"
+        >
+          <img
+            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-PotPlayer.webp"
+            alt="PotPlayer"
+            className="w-5 h-5"
+          />
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">
+            PotPlayer
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </a>
+      )}
+      
+      {/* VLC - 所有平台 */}
+      <a
+        href={vlcUrl}
+        className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"
+      >
+        <img
+          src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-VLC.webp"
+          alt="VLC"
+          className="w-5 h-5"
+        />
+        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">
+          VLC
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+        </div>
+      </a>
+      
+      {/* Infuse - iOS 和未知平台 */}
+      {(os === 'iOS' || os === 'Unknown') && (
+        <a
+          href={`infuse://x-callback-url/play?url=${encodeURIComponent(convertedUrl)}`}
+          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"
+        >
+          <img
+            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-infuse.webp"
+            alt="Infuse"
+            className="w-5 h-5"
+          />
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">
+            Infuse
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </a>
+      )}
+      
+      {/* nPlayer - macOS、移动端和未知平台 */}
+      {(os === 'macOS' || os === 'iOS' || os === 'Android' || os === 'Unknown') && (
+        <a
+          href={nplayerUrl}
+          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"
+        >
+          <img
+            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-NPlayer.webp"
+            alt="nPlayer"
+            className="w-5 h-5"
+          />
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">
+            nPlayer
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </a>
+      )}
+      
+      {/* MXPlayer - Android 和未知平台 */}
+      {(os === 'Android' || os === 'Unknown') && (
+        <a
           href={`intent:${encodeURI(convertedUrl)}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end`}  
-          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"      
-        >      
-          <img      
-            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-MXPlayer.webp"      
-            alt="MXPlayer"      
-            className="w-5 h-5"      
-          />      
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">      
-            MXPlayer      
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>      
-          </div>      
-        </a>      
-      )}      
+          className="relative group flex items-center justify-center bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-9 h-9 rounded-full shadow-md transition-colors"
+        >
+          <img
+            src="https://fastly.jsdelivr.net/gh/bpking1/embyExternalUrl@0.0.5/embyWebAddExternalUrl/icons/icon-MXPlayer.webp"
+            alt="MXPlayer"
+            className="w-5 h-5"
+          />
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap pointer-events-none z-50">
+            MXPlayer
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </a>
+      )}
+
+{/* 下载按钮组 - 视频 + 字幕 */}
+<div className="relative group">
+  <button className="relative flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-md transition-colors">
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+    <span>下载</span>
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  </button>
   
-{/* 下载按钮组 - 视频 + 字幕 */}      
-<div className="relative group">      
-  <button className="relative flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-md transition-colors">      
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">      
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />      
-    </svg>      
-    <span>下载</span>      
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">      
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />      
-    </svg>      
-  </button>      
-  
-  <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 min-w-[120px] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">      
-    {/* 视频链接 */}    
-    <a      
-      href={convertedUrl}      
-      target="_blank"      
-      rel="noopener noreferrer"      
-      className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"      
-    >      
-      视频      
-    </a>      
-  
-    {/* 🆕 使用独立检测的字幕状态 */}    
-    {independentSubtitles.map((subtitle) => (    
-      <a    
-        key={subtitle.url}    
-        href={subtitle.url}    
-        target="_blank"    
-        rel="noopener noreferrer"    
-        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"    
-      >    
-        {subtitle.type}字幕    
-      </a>    
-    ))} 
-  </div>  
+  <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 min-w-[120px] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+    {/* 视频链接 */}
+    <a
+      href={convertedUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+    >
+      视频
+    </a>
+
+    {/* 🆕 使用独立检测的字幕状态 */}
+    {independentSubtitles.map((subtitle) => (
+      <a
+        key={subtitle.url}
+        href={subtitle.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      >
+        {subtitle.type}字幕
+      </a>
+    ))}
+  </div>
 </div>
-</div>              
-  );              
+</div>
+  );
 })()}
                   </div>
                 </div>
