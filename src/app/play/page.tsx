@@ -3613,9 +3613,11 @@ useEffect(() => {
 
     if (autoSubtitles.length > 0) {
       console.log('✅ [初始化] 检测到字幕文件:', autoSubtitles);
+
+      // ✅ 只更新状态,触发 V8 useEffect
       setLoadedSubtitleUrls(autoSubtitles);
 
-      // 如果有多个字幕,添加切换选项
+      // ✅ 添加设置菜单
       artPlayerRef.current.setting.add({
         html: '外部字幕',
         tooltip: autoSubtitles.length > 0 ? `当前:${autoSubtitles[0].filename}` : '当前:关闭',
@@ -3635,6 +3637,7 @@ useEffect(() => {
             }
             return '关闭';
           }
+
           if (artPlayerRef.current) {
             artPlayerRef.current.subtitle.switch(item.subtitle.url, {
               type: item.subtitle.type,
@@ -3645,42 +3648,7 @@ useEffect(() => {
         },
       });
 
-      // 默认加载第一个检测到的字幕
-      const firstSub = autoSubtitles[0];
-
-      // 🔑 在这里添加日志  
-      console.log('🔍 [初始化] 准备调用 subtitle.switch:', firstSub);
-      console.log('🔍 [初始化] 播放器状态:', {
-        hasVideo: !!artPlayerRef.current.video,
-        readyState: artPlayerRef.current.video?.readyState,
-        currentSubtitleUrl: artPlayerRef.current.subtitle?.url,
-        currentSubtitleShow: artPlayerRef.current.subtitle?.show
-      });
-
-      artPlayerRef.current.subtitle.switch(firstSub.url, {
-        type: firstSub.type,
-      });
-
-      console.log('✅ [初始化] subtitle.switch 调用完成');
-      console.log('🔍 [初始化] 切换后状态:', {
-        url: artPlayerRef.current.subtitle.url,
-        show: artPlayerRef.current.subtitle.show
-      });
-
-      // 100ms 后验证
-      setTimeout(() => {
-        console.log('🔍 [初始化] 100ms后验证:', {
-          url: artPlayerRef.current.subtitle?.url,
-          show: artPlayerRef.current.subtitle?.show,
-          videoReadyState: artPlayerRef.current.video?.readyState
-        });
-      }, 100);
-
-      console.log('✅ 已自动加载字幕:', firstSub.filename);
-
-      if (artPlayerRef.current) {
-        artPlayerRef.current.notice.show = `已加载字幕: ${firstSub.filename}`;
-      }
+      console.log('✅ [初始化] 设置菜单已添加,等待 V8 useEffect 加载字幕');
     } else {
       console.log('📭 未检测到字幕文件');
     }
