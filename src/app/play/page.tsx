@@ -4101,34 +4101,21 @@ useEffect(() => {
     loadAndInit();
   }, [Hls, videoUrl, loading, blockAdEnabled]);
 // -----------------------------------------------------------------------------
-  // 🚀 修复 v2：监听字幕变化，并确保在视频切换稳定后更新 ArtPlayer 设置
+  // 🚀 修复 v3：使用 update 方法原地更新字幕设置，确保 UI 刷新
   // -----------------------------------------------------------------------------
   useEffect(() => {
     const art = artPlayerRef.current;
-    const autoSubtitles = loadedSubtitleUrls; 
+    const autoSubtitles = loadedSubtitleUrls;
 
     if (art && autoSubtitles.length > 0) {
       console.log(`🎬 准备更新字幕设置 (${autoSubtitles.length} 个文件)...`);
 
-      // 使用 500ms 延迟，确保在 switchUrl 完成且 UI 稳定后再更新菜单
-      // 解决 "选项里没有更新" 的问题
+      // 使用 500ms 延迟，确保在视频切换稳定后再执行
       const timer = setTimeout(() => {
         try {
-          // 1. 彻底清理旧的 '外部字幕' 设置项
-          // 直接操作 option 数组是修改 ArtPlayer 设置最直接的方式
-          if (art.setting && Array.isArray(art.setting.option)) {
-             const settings = art.setting.option;
-             // 倒序循环删除所有名为 '外部字幕' 的项，防止有残留
-             for (let i = settings.length - 1; i >= 0; i--) {
-               if (settings[i].html === '外部字幕') {
-                 settings.splice(i, 1);
-                 console.log('🗑️ 已移除旧字幕菜单项');
-               }
-             }
-          }
-
-          // 2. 构造新的设置项
           const firstSub = autoSubtitles[0];
+          
+          // 构造新的配置对象
           const newSubtitleOption = {
             html: '外部字幕',
             tooltip: `当前:${firstSub.filename}`,
@@ -4152,31 +4139,55 @@ useEffect(() => {
             },
           };
 
-          // 3. 添加新设置项并强制刷新
-          art.setting.add(newSubtitleOption);
-          console.log('✅ 新字幕菜单项已添加');
+          // 🔍 查找现有的 '外部字幕' 菜单项索引
+          // 注意：ArtPlayer 的 setting.option 是一个数组
+          const settings = art.setting.option;
+          const existingIndex = settings.findIndex((item: any) => item.html === '外部字幕');
 
-          // 4. 强制切换到第一个字幕
-          art.subtitle.switch(firstSub.url, { type: firstSub.type });
-          art.subtitle.show = true;
-          art.notice.show = `已加载字幕: ${firstSub.filename}`;
-          
+          if (existingIndex !== -1) {
+            // ✅ 方案 A: 如果存在，使用 update 原地更新 (这是最稳妥的方式)
+            console.log('🔄 更新现有的字幕菜单项...');
+            art.setting.update(existingIndex, newSubtitleOption);
+          } else {
+            // ✅ 方案 B: 如果不存在，使用 add 添加
+            console.log('➕ 添加新的字幕菜单项...');
+            art.setting.add(newSubtitleOption);
+          }
+
+          // ⚡ 强制切换字幕轨道（核心步骤）
+          // 即使菜单没更新，这行代码也能保证屏幕上的字幕变了
+          if (art.subtitle.url !== firstSub.url) {
+             art.subtitle.switch(firstSub.url, { type: firstSub.type });
+             art.subtitle.show = true;
+             art.notice.show = `已加载字幕: ${firstSub.filename}`;
+             console.log(`✅ 字幕轨道已切换至: ${firstSub.filename}`);
+          }
+
         } catch (error) {
           console.warn('⚠️ 字幕设置更新异常:', error);
         }
-      }, 500); // 500毫秒延迟
+      }, 500);
 
       return () => clearTimeout(timer);
-    } else if (art && autoSubtitles.length === 0) {
-        // 如果没有字幕，也尝试清理菜单
-        if (art.setting && Array.isArray(art.setting.option)) {
-             const settings = art.setting.option;
-             const idx = settings.findIndex((s: any) => s.html === '外部字幕');
-             if (idx > -1) settings.splice(idx, 1);
-        }
-        art.subtitle.show = false;
+    } 
+    else if (art && autoSubtitles.length === 0) {
+        // 如果没有字幕，尝试移除菜单项
+        // 这里我们尝试查找并 update 为 null 或者隐藏，或者使用 splice (如果 ArtPlayer 不支持 remove)
+        try {
+            const settings = art.setting.option;
+            const idx = settings.findIndex((s: any) => s.html === '外部字幕');
+            if (idx > -1) {
+                // ArtPlayer 并没有标准的 remove 方法，但有些版本支持 update 为空
+                // 或者我们可以保留菜单但显示为"无字幕"
+                // 这里为了保险，我们只关闭字幕显示
+                art.subtitle.show = false;
+                // 如果你想彻底移除，可以尝试：
+                // settings.splice(idx, 1); 
+                // art.setting.show = art.setting.show; // 触发一种重绘 hack
+            }
+        } catch (e) { /* ignore */ }
     }
-  }, [loadedSubtitleUrls, artPlayerRef.current]); // 监听 loadedSubtitleUrls 变化
+  }, [loadedSubtitleUrls, artPlayerRef.current]);
 
   // 当组件卸载时清理定时器、Wake Lock 和播放器资源
   useEffect(() => {
