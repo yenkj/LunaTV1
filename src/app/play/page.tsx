@@ -1799,20 +1799,24 @@ useEffect(() => {
 	// 🆕 集数变化时重新检测字幕
     if (artPlayerRef.current && !isSourceChangingRef.current) {
       (async () => {
-        console.log('🔄 集数变化,重新检测字幕...');
+        console.log('🔄 [集数切换] 开始重新检测字幕...');
+        console.log('🔍 [集数切换] 当前 videoUrl:', videoUrl);
+        console.log('🔍 [集数切换] 当前 currentEpisodeIndex:', currentEpisodeIndex);
         try {
           const autoSubtitles = await autoLoadSubtitles(videoUrl);
           if (autoSubtitles.length > 0) {
-            console.log('✅ 新集数检测到字幕:', autoSubtitles);
+            console.log('✅ [集数切换] 检测到字幕:', autoSubtitles);
+            console.log('🔍 [集数切换] 准备更新 loadedSubtitleUrls 状态');
             setLoadedSubtitleUrls(autoSubtitles);
+            console.log('✅ [集数切换] loadedSubtitleUrls 状态已更新');
           } else {
-            console.log('📭 新集数未检测到字幕文件');
+            console.log('📭 [集数切换] 未检测到字幕文件');
             if (artPlayerRef.current) {
               artPlayerRef.current.subtitle.show = false;
             }
           }
-        } catch (error) { 
-          console.warn('⚠️ 集数切换后字幕检测失败:', error);  
+        } catch (error) {
+          console.warn('⚠️ [集数切换] 字幕检测失败:', error);
         }
       })();
     }
@@ -2782,84 +2786,109 @@ useEffect(() => {
   detectSubtitlesIndependently();
 }, [availableSources, currentEpisodeIndex]);
 //添加 V8 修复的 useEffect
-useEffect(() => {    
-  const art = artPlayerRef.current;    
-  const autoSubtitles = loadedSubtitleUrls;    
-    
-  if (art && autoSubtitles.length > 0) {    
-    console.log(`🎬 [V8] 准备强制刷新字幕设置 (时间戳: ${new Date().getTime()})...`);    
-        
-    const timer = setTimeout(() => {    
-      try {    
-        const firstSub = autoSubtitles[0];    
-          
-        // 🔑 先检查是否已存在外部字幕设置项  
-        const settings = art.setting.option;  
-        const hasExternalSubtitle = settings.some((s: any) => s.html === '外部字幕');  
-          
-        console.log(`🔍 [V8] 当前设置项数量: ${settings.length}, 已存在外部字幕: ${hasExternalSubtitle}`);  
-          
-        if (hasExternalSubtitle) {  
-          // 如果已存在,先移除旧的  
-          const index = settings.findIndex((s: any) => s.html === '外部字幕');  
-          if (index !== -1) {  
-            settings.splice(index, 1);  
-            console.log(`🗑️ [V8] 已移除旧的外部字幕项 (索引: ${index})`);  
-          }  
-        }  
-          
-        // 然后添加新的  
-        console.log(`➕ [V8] 正在添加新的外部字幕项: ${firstSub.filename}`);  
-        art.setting.add({    
-          html: '外部字幕',    
-          name: 'external_subs',    
-          tooltip: `当前: ${firstSub.filename}`,    
-          icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',    
-          selector: [    
-            { html: '关闭', value: 'off' },    
-            ...autoSubtitles.map((sub) => ({    
-              html: sub.filename,    
-              value: sub.url,    
-              subtitle: { url: sub.url, type: sub.type },    
-            })),    
-          ],    
-          onSelect: function (item: any) {    
-            if (item.value === 'off') {    
-              art.subtitle.show = false;    
-              return '关闭';    
-            }    
-            art.subtitle.switch(item.subtitle.url, { type: item.subtitle.type });    
-            art.subtitle.show = true;    
-            return item.html;    
-          },    
-        });  
-          
-        console.log(`✅ [V8] 外部字幕菜单已添加, 当前设置项数量: ${art.setting.option.length}`);  
-            
-        if (art.subtitle.url !== firstSub.url) {    
-          console.log(`🔄 [V8] 切换字幕轨道至: ${firstSub.filename}`);  
-          art.subtitle.switch(firstSub.url, { type: firstSub.type });    
-          art.subtitle.show = true;    
-          art.notice.show = `已加载字幕: ${firstSub.filename}`;    
-        }    
-      } catch (error) {    
-        console.warn('⚠️ [V8] 字幕设置更新异常:', error);    
-      }    
-    }, 0);    
-    
-    return () => clearTimeout(timer);    
-  } else if (art && autoSubtitles.length === 0) {    
-    console.log(`📭 [V8] 无字幕,准备移除外部字幕项 (时间戳: ${new Date().getTime()})`);  
-    // 移除外部字幕项  
-    const settings = art.setting.option;  
-    const index = settings.findIndex((s: any) => s.html === '外部字幕');  
-    if (index !== -1) {  
-      settings.splice(index, 1);  
-      console.log(`✅ [V8] 已移除外部字幕项, 当前设置项数量: ${settings.length}`);  
-    } else {  
-      console.log(`ℹ️ [V8] 未找到外部字幕项,无需移除`);  
-    }  
-  }    
+useEffect(() => {
+  const art = artPlayerRef.current;
+  const autoSubtitles = loadedSubtitleUrls;
+
+  console.log(`🔍 [V8] useEffect 触发:`, {
+    hasArt: !!art,
+    subtitlesCount: autoSubtitles.length,
+    subtitles: autoSubtitles,
+    timestamp: new Date().getTime()
+  });
+
+  if (art && autoSubtitles.length > 0) {
+    console.log(`🎬 [V8] 准备强制刷新字幕设置...`);
+
+    const timer = setTimeout(() => {
+      try {
+        console.log(`🔍 [V8] setTimeout 开始执行`);
+        console.log(`🔍 [V8] 播放器状态:`, {
+          hasVideo: !!art.video,
+          readyState: art.video?.readyState,
+          currentSubtitleUrl: art.subtitle?.url,
+          currentSubtitleShow: art.subtitle?.show
+        });
+
+        const firstSub = autoSubtitles[0];
+        console.log(`🔍 [V8] 准备加载字幕:`, firstSub);
+
+        const newSubtitleOption = {
+          html: '外部字幕',
+          name: 'external_subs',
+          tooltip: `当前: ${firstSub.filename}`,
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',
+          selector: [
+            { html: '关闭', value: 'off' },
+            ...autoSubtitles.map((sub) => ({
+              html: sub.filename,
+              value: sub.url,
+              subtitle: { url: sub.url, type: sub.type },
+            })),
+          ],
+          onSelect: function (item: any) {
+            if (item.value === 'off') {
+              art.subtitle.show = false;
+              return '关闭';
+            }
+            art.subtitle.switch(item.subtitle.url, { type: item.subtitle.type });
+            art.subtitle.show = true;
+            return item.html;
+          },
+        };
+
+        const cleanOptions = art.setting.option.filter(
+          (item: any) => item.html !== '外部字幕'
+        );
+        cleanOptions.push(newSubtitleOption);
+        art.setting.option = [...cleanOptions];
+        console.log(`✅ [V8] 设置菜单已更新`);
+
+        console.log(`🔍 [V8] 当前字幕 URL: ${art.subtitle.url}, 目标 URL: ${firstSub.url}`);
+        if (art.subtitle.url !== firstSub.url) {
+          console.log(`🔍 [V8] 开始调用 subtitle.switch`);
+          art.subtitle.switch(firstSub.url, { type: firstSub.type });
+          console.log(`✅ [V8] subtitle.switch 调用完成`);
+
+          art.subtitle.show = true;
+          console.log(`✅ [V8] 设置 subtitle.show = true`);
+
+          // 验证最终状态
+          setTimeout(() => {
+            console.log(`🔍 [V8] 100ms后验证:`, {
+              url: art.subtitle.url,
+              show: art.subtitle.show,
+              videoReadyState: art.video?.readyState
+            });
+          }, 100);
+
+          art.notice.show = `已加载字幕: ${firstSub.filename}`;
+        } else {
+          console.log(`ℹ️ [V8] 字幕 URL 相同,跳过切换`);
+        }
+      } catch (error) {
+        console.warn('❌ [V8] 异常:', error);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  } else if (art && autoSubtitles.length === 0) {
+    console.log(`🧹 [V8] 无字幕,清理外部字幕设置`);
+    art.subtitle.show = false;
+    const cleanOptions = art.setting.option.filter(
+      (item: any) => item.html !== '外部字幕'
+    );
+    if (cleanOptions.length !== art.setting.option.length) {
+      art.setting.option = [...cleanOptions];
+      console.log(`✅ [V8] 已移除外部字幕菜单项`);
+    }
+  } else {
+    // 其他情况(播放器未就绪等)
+    console.log(`ℹ️ [V8] 条件不满足:`, {
+      hasArt: !!art,
+      subtitlesCount: autoSubtitles.length
+    });
+  }
 }, [loadedSubtitleUrls, artPlayerRef.current]);
   useEffect(() => {
     // 异步初始化播放器，避免SSR问题
@@ -3573,63 +3602,64 @@ useEffect(() => {
         // 应用CSS优化
         optimizeDanmukuControlsCSS();
 
-// 🆕 自动检测并加载字幕    
-(async () => {  
-  try {  
-    console.log('🔍 开始检测字幕文件...');  
-    const autoSubtitles = await autoLoadSubtitles(videoUrl);  
-      
-    if (autoSubtitles.length > 0) {  
-      console.log('✅ 检测到字幕文件:', autoSubtitles);  
-      setLoadedSubtitleUrls(autoSubtitles);  
-        
-      // 如果有多个字幕,添加切换选项  
-      artPlayerRef.current.setting.add({  
-        html: '外部字幕',  
-        tooltip: autoSubtitles.length > 0 ? `当前:${autoSubtitles[0].filename}` : '当前:关闭',  
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/></svg>',  
-        selector: [  
-          { html: '关闭', value: 'off' },  
-          ...autoSubtitles.map((sub) => ({  
-            html: sub.filename,  
-            value: sub.url,  
-            subtitle: { url: sub.url, type: sub.type },  
-          })),  
-        ],  
-        onSelect: function (item: any) {  
-          if (item.value === 'off') {  
-            if (artPlayerRef.current) {  
-              artPlayerRef.current.subtitle.show = false;  
-            }  
-            return '关闭';  
-          }  
-          if (artPlayerRef.current) {  
-            artPlayerRef.current.subtitle.switch(item.subtitle.url, {  
-              type: item.subtitle.type,  
-            });  
-            artPlayerRef.current.subtitle.show = true;  
-          }  
-          return item.html;  
-        },  
-      });  
-        
-      // 默认加载第一个检测到的字幕  
-      const firstSub = autoSubtitles[0];  
-      artPlayerRef.current.subtitle.switch(firstSub.url, {  
-        type: firstSub.type,  
-      });  
-      console.log('✅ 已自动加载字幕:', firstSub.filename);  
-        
-      if (artPlayerRef.current) {  
-        artPlayerRef.current.notice.show = `已加载字幕: ${firstSub.filename}`;  
-      }  
-    } else {  
-      console.log('📭 未检测到字幕文件');  
-    }  
-  } catch (error) {  
-    console.warn('⚠️ 自动加载字幕失败:', error);  
-  }  
+// 🆕 自动检测并加载字幕
+(async () => {
+  try {
+    console.log('🔍 [初始化] 开始检测字幕文件...');
+    console.log('🔍 [初始化] 当前 videoUrl:', videoUrl);
+    const autoSubtitles = await autoLoadSubtitles(videoUrl);
+
+    if (autoSubtitles.length > 0) {
+      console.log('✅ [初始化] 检测到字幕文件:', autoSubtitles);
+      setLoadedSubtitleUrls(autoSubtitles);
+
+      // 如果有多个字幕,添加切换选项
+      artPlayerRef.current.setting.add({...});
+
+      // 默认加载第一个检测到的字幕
+      const firstSub = autoSubtitles[0];
+
+      // 🔑 在这里添加日志  
+      console.log('🔍 [初始化] 准备调用 subtitle.switch:', firstSub);
+      console.log('🔍 [初始化] 播放器状态:', {
+        hasVideo: !!artPlayerRef.current.video,
+        readyState: artPlayerRef.current.video?.readyState,
+        currentSubtitleUrl: artPlayerRef.current.subtitle?.url,
+        currentSubtitleShow: artPlayerRef.current.subtitle?.show
+      });
+
+      artPlayerRef.current.subtitle.switch(firstSub.url, {
+        type: firstSub.type,
+      });
+
+      console.log('✅ [初始化] subtitle.switch 调用完成');
+      console.log('🔍 [初始化] 切换后状态:', {
+        url: artPlayerRef.current.subtitle.url,
+        show: artPlayerRef.current.subtitle.show
+      });
+
+      // 100ms 后验证
+      setTimeout(() => {
+        console.log('🔍 [初始化] 100ms后验证:', {
+          url: artPlayerRef.current.subtitle?.url,
+          show: artPlayerRef.current.subtitle?.show,
+          videoReadyState: artPlayerRef.current.video?.readyState
+        });
+      }, 100);
+
+      console.log('✅ 已自动加载字幕:', firstSub.filename);
+
+      if (artPlayerRef.current) {
+        artPlayerRef.current.notice.show = `已加载字幕: ${firstSub.filename}`;
+      }
+    } else {
+      console.log('📭 未检测到字幕文件');
+    }
+  } catch (error) {
+    console.warn('⚠️ 自动加载字幕失败:', error);
+  }
 })();
+
         // 精确解决弹幕菜单与进度条拖拽冲突 - 基于ArtPlayer原生拖拽逻辑
         const fixDanmakuProgressConflict = () => {
           let isDraggingProgress = false;
