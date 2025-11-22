@@ -284,9 +284,18 @@ useEffect(() => {
       
     const fileId = match[1];
     console.log('🔍 正在获取 banana 元数据:', fileId);
-    
+
+    // 🔑 中止之前的请求
+    if (bananaMetadataAbortRef.current) {
+      bananaMetadataAbortRef.current.abort();
+    }
+
+    bananaMetadataAbortRef.current = new AbortController()
+
     try {
-      const response = await fetch(`http://us.199301.xyz:4000/info/${fileId}`);
+      const response = await fetch(`http://us.199301.xyz:4000/info/${fileId}`,  
+        { signal: bananaMetadataAbortRef.current.signal }  // 🔑 添加 signal
+      );
       const data = await response.json();
       setBananaMetadata(data);
       console.log('✅ Banana 元数据获取成功:', data);
@@ -330,8 +339,8 @@ useEffect(() => {
               return item.html;
             },
           });
-		  console.log(`✅ [内嵌字幕] 内嵌字幕菜单已添加, 当前设置项数量: ${artPlayerRef.current.setting.option.length}`);
-		  }  
+      console.log(`✅ [内嵌字幕] 内嵌字幕菜单已添加, 当前设置项数量: ${artPlayerRef.current.setting.option.length}`);
+      }  
       } else {  
       // 👇 第二个日志加在这里  
       console.log(`ℹ️ [内嵌字幕] 内嵌字幕项已存在,跳过添加`);  
@@ -375,10 +384,15 @@ useEffect(() => {
       }
       
     } catch (error) {
+      // 🔑 处理中止错误  
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('🛑 Banana 元数据请求已取消');
+        return;
+      }
       console.error('❌ 获取 banana 元数据失败:', error);
     }
   };
-  
+
   fetchBananaMetadata();
 }, [detail?.source, videoUrl]);
   // 总集数
@@ -1340,11 +1354,19 @@ useEffect(() => {
   };
 
   // 清理播放器资源的统一函数（添加更完善的清理逻辑）
-  const cleanupPlayer = () => {
-    if (bananaSeekTimeoutRef.current) {
-      clearTimeout(bananaSeekTimeoutRef.current);
-      bananaSeekTimeoutRef.current = null;
-      console.log('🛑 已清理 banana seek 定时器');
+   const cleanupPlayer = () => {
+     // 🔑 中止 banana 元数据请求
+     if (bananaMetadataAbortRef.current) {
+       bananaMetadataAbortRef.current.abort();
+       bananaMetadataAbortRef.current = null;
+       console.log('🛑 已中止 banana 元数据请求');
+     }
+
+     // 清理 banana seek 定时器
+     if (bananaSeekTimeoutRef.current) {
+       clearTimeout(bananaSeekTimeoutRef.current);
+       bananaSeekTimeoutRef.current = null;
+       console.log('🛑 已清理 banana seek 定时器');
     }
     // 🚀 新增：清理弹幕优化相关的定时器
     if (danmuOperationTimeoutRef.current) {
