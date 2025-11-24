@@ -4016,31 +4016,45 @@ useEffect(() => {
             }, 500); // 增加到500ms延迟，减少频繁重置导致的闪烁
           }
         });
-
-// 在组件顶部添加 ref  
-const videoUrlRef = useRef(videoUrl);  
-  
-// 同步最新值到 ref  
-useEffect(() => {  
-  videoUrlRef.current = videoUrl;  
-}, [videoUrl]);  
   
 // 修改 seek 事件处理  
 let seekTimeout: NodeJS.Timeout | null = null;  
   
 artPlayerRef.current.on('seek', (currentTime: number) => {  
-  if (detail?.source === 'banana' && videoUrlRef.current.includes('/t/')) {  
-    if (seekTimeout) clearTimeout(seekTimeout);  
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
+  console.log(` [前端 Seek] 触发 seek 事件`);  
+  console.log(` [前端 Seek] currentTime 参数: ${currentTime}s`);  
+  console.log(` [前端 Seek] 播放器当前 URL: ${artPlayerRef.current?.url}`);  
+  console.log(` [前端 Seek] 播放器实际时间: ${artPlayerRef.current?.currentTime}s`);  
+  console.log(` [前端 Seek] source: ${detail?.source}`);  
+    
+  if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {  
+    if (seekTimeout) {  
+      console.log(` [前端 Seek] 清除之前的定时器`);  
+      clearTimeout(seekTimeout);  
+    }  
+      
     seekTimeout = setTimeout(() => {  
-      const baseUrl = videoUrlRef.current.split('?')[0];  
-      const params = new URLSearchParams(videoUrlRef.current.split('?')[1] || '');  
-      params.set('start', currentTime.toString());  
-      const newUrl = `${baseUrl}?${params.toString()}`;  
+      const currentUrl = artPlayerRef.current.url;  
+      const baseUrl = currentUrl.split('?')[0];  
+      const params = new URLSearchParams(currentUrl.split('?')[1] || '');  
         
-      artPlayerRef.current.switchQuality(newUrl).then(() => {  
-        artPlayerRef.current.currentTime = currentTime;  
-      });  
+      console.log(` [前端 Seek] 原始 URL: ${currentUrl}`);  
+      console.log(` [前端 Seek] 原始 params: ${params.toString()}`);  
+        
+      params.set('start', currentTime.toString());  
+      console.log(` [前端 Seek] 设置 start=${currentTime}`);  
+        
+      const newUrl = `${baseUrl}?${params.toString()}`;  
+      console.log(` [前端 Seek] 新 URL: ${newUrl}`);  
+      console.log(`⏩ 跳转到 ${currentTime.toFixed(2)}s`);  
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
+        
+      artPlayerRef.current.switchQuality(newUrl);  
     }, 500);  
+  } else {  
+    console.log(` [前端 Seek] 不满足条件,跳过处理`);  
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
   }  
 });
         // 监听拖拽状态 - v5.2.0优化: 在拖拽期间暂停弹幕更新以减少闪烁
