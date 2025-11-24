@@ -4036,10 +4036,10 @@ useEffect(() => {
             }, 500); // 增加到500ms延迟，减少频繁重置导致的闪烁
           }
         });
-// 修改 seek 事件处理 		  
+		  
 // 修改 seek 事件处理    
 let seekTimeout: NodeJS.Timeout | null = null;  
-let pendingSeekTime: number | null = null; // 🆕 存储待恢复的时间  
+let seekTargetTime = 0; // 存储用户拖动的目标时间  
   
 artPlayerRef.current.on('seek', (currentTime: number) => {  
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
@@ -4047,7 +4047,10 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
   console.log(` [前端 Seek] currentTime 参数: ${currentTime}s`);  
   console.log(` [前端 Seek] 播放器当前 URL: ${artPlayerRef.current?.url}`);  
   console.log(` [前端 Seek] 播放器实际 currentTime: ${artPlayerRef.current?.currentTime}s`);  
+  console.log(` [前端 Seek] 捕获的目标时间: ${seekTargetTime}s`); // 🆕 添加这行  
   console.log(` [前端 Seek] 参数与实际差值: ${Math.abs(currentTime - (artPlayerRef.current?.currentTime || 0)).toFixed(2)}s`);  
+  console.log(` [前端 Seek] 播放器 seeking 状态: ${artPlayerRef.current?.seeking}`);  
+  console.log(` [前端 Seek] seekTimeout 状态: ${seekTimeout ? '存在' : 'null'}`);  
   console.log(` [前端 Seek] 触发时间戳: ${Date.now()}`);  
       
   if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {  
@@ -4059,47 +4062,31 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
     seekTimeout = setTimeout(() => {  
       const currentUrl = artPlayerRef.current.url;  
       const baseUrl = currentUrl.split('?')[0];  
-      const targetTime = artPlayerRef.current.currentTime;  
-      const newUrl = `${baseUrl}?start=${targetTime}`;  
         
+      // 🆕 关键修改: 使用捕获的目标时间,而不是 currentTime 参数  
+      const targetTime = seekTargetTime;  
+      const newUrl = `${baseUrl}?start=${targetTime}`;  
+          
       console.log(` [前端 Seek Timeout] ═══ 500ms 后执行 ═══`);  
       console.log(` [前端 Seek Timeout] 闭包捕获的 currentTime: ${currentTime}s`);  
-      console.log(` [前端 Seek Timeout] 播放器实时 currentTime: ${targetTime}s`);  
+      console.log(` [前端 Seek Timeout] 使用目标时间: ${targetTime}s`);  
       console.log(` [前端 Seek Timeout] 当前 URL: ${currentUrl}`);  
+      console.log(` [前端 Seek Timeout] 基础 URL: ${baseUrl}`);  
       console.log(` [前端 Seek Timeout] 新 URL: ${newUrl}`);  
       console.log(`⏩ 跳转到 ${targetTime.toFixed(2)}s`);  
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
-        
-      // 🆕 保存待恢复的时间  
-      pendingSeekTime = targetTime;  
-        
+          
       artPlayerRef.current.switchQuality(newUrl);  
     }, 500);  
   } else {  
     console.log(` [前端 Seek] 不满足条件,跳过处理`);  
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
   }  
-});  
-  
-// 🆕 在 video:canplay 事件中恢复播放时间  
-artPlayerRef.current.on('video:canplay', () => {  
-  if (pendingSeekTime !== null && detail?.source === 'banana') {  
-    console.log(`🔧 [video:canplay] 检测到待恢复时间: ${pendingSeekTime}s`);  
-    console.log(`🔧 [video:canplay] 当前播放器 currentTime: ${artPlayerRef.current?.currentTime}s`);  
-      
-    // 延迟设置,确保视频源完全加载  
-    setTimeout(() => {  
-      if (artPlayerRef.current && pendingSeekTime !== null) {  
-        artPlayerRef.current.currentTime = pendingSeekTime;  
-        console.log(`✅ [video:canplay] 已恢复播放时间为: ${pendingSeekTime}s`);  
-        console.log(`✅ [video:canplay] 设置后播放器 currentTime: ${artPlayerRef.current?.currentTime}s`);  
-        pendingSeekTime = null;  
-      }  
-    }, 100);  
-  }  
 });
         // 监听拖拽状态 - v5.2.0优化: 在拖拽期间暂停弹幕更新以减少闪烁
         artPlayerRef.current.on('video:seeking', () => {
+		  seekTargetTime = artPlayerRef.current?.currentTime || 0;  
+  console.log(`🔍 [video:seeking] 捕获目标时间: ${seekTargetTime}s`);
   console.log('🔍 [video:seeking] ═══════════════════════════');  
   console.log(`🔍 [video:seeking] 开始拖动`);  
   console.log(`🔍 [video:seeking] 当前时间: ${artPlayerRef.current?.currentTime}s`);  
@@ -4122,7 +4109,7 @@ artPlayerRef.current.on('video:canplay', () => {
   console.log(`✅ [video:seeked] 最终时间: ${artPlayerRef.current?.currentTime}s`);  
   console.log(`✅ [video:seeked] 当前 URL: ${artPlayerRef.current?.url}`);  
   console.log(`✅ [video:seeked] 时间戳: ${Date.now()}`);  
-  console.log('✅ [video:seeked] ═══════════════════════════');			
+  console.log('✅ [video:seeked] ═══════════════════════════'); 		
           isDraggingProgressRef.current = false;
           // v5.2.0优化: 拖拽结束后根据外部弹幕开关状态决定是否恢复弹幕显示
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
