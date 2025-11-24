@@ -3526,7 +3526,24 @@ useEffect(() => {
       // 监听播放器事件
       artPlayerRef.current.on('ready', async () => {
         setError(null);
-
+ // 🆕 在这里添加第三步的代码  
+  artPlayerRef.current.on('video:loadstart', () => {  
+    console.log('📺 [video:loadstart] ═══════════════════════════');  
+    console.log('📺 [video:loadstart] 开始加载新视频源');  
+    console.log(`📺 [video:loadstart] URL: ${artPlayerRef.current?.url}`);  
+    console.log(`📺 [video:loadstart] currentTime: ${artPlayerRef.current?.currentTime}s`);  
+    console.log(`📺 [video:loadstart] 时间戳: ${Date.now()}`);  
+    console.log('📺 [video:loadstart] ═══════════════════════════');  
+  });  
+    
+  artPlayerRef.current.on('video:canplay', () => {  
+    console.log('✅ [video:canplay] ═══════════════════════════');  
+    console.log('✅ [video:canplay] 视频可以播放');  
+    console.log(`✅ [video:canplay] currentTime: ${artPlayerRef.current?.currentTime}s`);  
+    console.log(`✅ [video:canplay] URL: ${artPlayerRef.current?.url}`);  
+    console.log(`✅ [video:canplay] 时间戳: ${Date.now()}`);  
+    console.log('✅ [video:canplay] ═══════════════════════════');  
+  });  
         // iOS设备自动播放优化：如果是静音启动的，在开始播放后恢复音量
         if ((isIOS || isSafari) && artPlayerRef.current.muted) {
           console.log('iOS设备静音自动播放，准备在播放开始后恢复音量');
@@ -4001,6 +4018,9 @@ useEffect(() => {
 
         // 监听播放进度跳转，优化弹幕重置（减少闪烁）
         artPlayerRef.current.on('seek', () => {
+			  console.log('🎯 [Seek-弹幕] 第一个 seek 监听器触发');  
+  console.log(`🎯 [Seek-弹幕] 播放器 currentTime: ${artPlayerRef.current?.currentTime}s`);  
+  console.log(`🎯 [Seek-弹幕] 时间戳: ${Date.now()}`); 
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
             // 清除之前的重置计时器
             if (seekResetTimeoutRef.current) {
@@ -4017,30 +4037,59 @@ useEffect(() => {
           }
         });
   
-let seekTimeout: NodeJS.Timeout | null = null;  
-  
 artPlayerRef.current.on('seek', (currentTime: number) => {  
-  if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {  
-    // ✅ 过滤异常的 currentTime=0  
-    if (currentTime === 0 && artPlayerRef.current.currentTime > 5) {  
-      console.log(`⚠️ 忽略异常的 seek 到 0s`);  
-      return;  
-    }  
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
+  console.log(` [前端 Seek] 触发 seek 事件`);  
+  console.log(` [前端 Seek] currentTime 参数: ${currentTime}s`);  
+  console.log(` [前端 Seek] 播放器当前 URL: ${artPlayerRef.current?.url}`);  
+    
+  // 🆕 关键诊断日志  
+  console.log(` [前端 Seek] 播放器实际 currentTime: ${artPlayerRef.current?.currentTime}s`);  
+  console.log(` [前端 Seek] 参数与实际差值: ${Math.abs(currentTime - (artPlayerRef.current?.currentTime || 0)).toFixed(2)}s`);  
+  console.log(` [前端 Seek] 播放器 seeking 状态: ${artPlayerRef.current?.seeking}`);  
+  console.log(` [前端 Seek] seekTimeout 状态: ${seekTimeout ? '存在' : 'null'}`);  
+  console.log(` [前端 Seek] 触发时间戳: ${Date.now()}`);  
       
-    if (seekTimeout) clearTimeout(seekTimeout);  
+  if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {  
+    if (seekTimeout) {  
+      console.log(` [前端 Seek] 清除之前的定时器`);  
+      clearTimeout(seekTimeout);  
+    }  
+        
     seekTimeout = setTimeout(() => {  
       const currentUrl = artPlayerRef.current.url;  
       const baseUrl = currentUrl.split('?')[0];  
-      // ✅ 直接使用 currentTime 构建,不解析旧参数  
       const newUrl = `${baseUrl}?start=${currentTime}`;  
         
+      // 🆕 setTimeout 回调中的诊断日志  
+      console.log(` [前端 Seek Timeout] ═══ 500ms 后执行 ═══`);  
+      console.log(` [前端 Seek Timeout] 闭包捕获的 currentTime: ${currentTime}s`);  
+      console.log(` [前端 Seek Timeout] 播放器实际 currentTime: ${artPlayerRef.current?.currentTime}s`);  
+      console.log(` [前端 Seek Timeout] 当前 URL: ${currentUrl}`);  
+      console.log(` [前端 Seek Timeout] 基础 URL: ${baseUrl}`);  
+      console.log(` [前端 Seek Timeout] 新 URL: ${newUrl}`);  
       console.log(`⏩ 跳转到 ${currentTime.toFixed(2)}s`);  
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
+          
       artPlayerRef.current.switchQuality(newUrl);  
+        
+      // 🆕 switchQuality 调用后  
+      console.log(` [前端 Seek Timeout] switchQuality 已调用`);  
+      console.log(` [前端 Seek Timeout] 调用后 URL: ${artPlayerRef.current?.url}`);  
     }, 500);  
+  } else {  
+    console.log(` [前端 Seek] 不满足条件,跳过处理`);  
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
   }  
 });
         // 监听拖拽状态 - v5.2.0优化: 在拖拽期间暂停弹幕更新以减少闪烁
         artPlayerRef.current.on('video:seeking', () => {
+  console.log('🔍 [video:seeking] ═══════════════════════════');  
+  console.log(`🔍 [video:seeking] 开始拖动`);  
+  console.log(`🔍 [video:seeking] 当前时间: ${artPlayerRef.current?.currentTime}s`);  
+  console.log(`🔍 [video:seeking] 当前 URL: ${artPlayerRef.current?.url}`);  
+  console.log(`🔍 [video:seeking] 时间戳: ${Date.now()}`);  
+  console.log('🔍 [video:seeking] ═══════════════════════════');
           isDraggingProgressRef.current = true;
           // v5.2.0新增: 拖拽时隐藏弹幕，减少CPU占用和闪烁
           // 只有在外部弹幕开启且当前显示时才隐藏
@@ -4052,6 +4101,12 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
         });
 
         artPlayerRef.current.on('video:seeked', () => {
+  console.log('✅ [video:seeked] ═══════════════════════════');  
+  console.log(`✅ [video:seeked] 拖动结束`);  
+  console.log(`✅ [video:seeked] 最终时间: ${artPlayerRef.current?.currentTime}s`);  
+  console.log(`✅ [video:seeked] 当前 URL: ${artPlayerRef.current?.url}`);  
+  console.log(`✅ [video:seeked] 时间戳: ${Date.now()}`);  
+  console.log('✅ [video:seeked] ═══════════════════════════');			
           isDraggingProgressRef.current = false;
           // v5.2.0优化: 拖拽结束后根据外部弹幕开关状态决定是否恢复弹幕显示
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
