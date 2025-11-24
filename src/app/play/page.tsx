@@ -4039,25 +4039,26 @@ useEffect(() => {
 // 修改 seek 事件处理 		  
 // 修改 seek 事件处理    
 let seekTimeout: NodeJS.Timeout | null = null;    
-    
 artPlayerRef.current.on('seek', (currentTime: number) => {    
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');    
   console.log(` [前端 Seek] 触发 seek 事件`);    
   console.log(` [前端 Seek] currentTime 参数: ${currentTime}s`);    
   console.log(` [前端 Seek] 播放器当前 URL: ${artPlayerRef.current?.url}`);    
+      
+  // 🆕 关键诊断日志    
   console.log(` [前端 Seek] 播放器实际 currentTime: ${artPlayerRef.current?.currentTime}s`);    
   console.log(` [前端 Seek] 参数与实际差值: ${Math.abs(currentTime - (artPlayerRef.current?.currentTime || 0)).toFixed(2)}s`);    
   console.log(` [前端 Seek] 播放器 seeking 状态: ${artPlayerRef.current?.seeking}`);    
-  console.log(` [前端 Seek] seekTimeout 状态: ${seekTimeoutRef.current ? '存在' : 'null'}`);    
+  console.log(` [前端 Seek] seekTimeout 状态: ${seekTimeout ? '存在' : 'null'}`);    
   console.log(` [前端 Seek] 触发时间戳: ${Date.now()}`);    
         
   if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {    
-    if (seekTimeoutRef.current) {    
+    if (seekTimeout) {    
       console.log(` [前端 Seek] 清除之前的定时器`);    
-      clearTimeout(seekTimeoutRef.current);    
+      clearTimeout(seekTimeout);    
     }    
           
-    seekTimeoutRef.current = setTimeout(() => {    
+    seekTimeout = setTimeout(() => {    
       const currentUrl = artPlayerRef.current.url;    
       const baseUrl = currentUrl.split('?')[0];  
         
@@ -4065,6 +4066,7 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
       const targetTime = artPlayerRef.current.currentTime;  
       const newUrl = `${baseUrl}?start=${targetTime}`;    
           
+      // 🆕 setTimeout 回调中的诊断日志    
       console.log(` [前端 Seek Timeout] ═══ 500ms 后执行 ═══`);    
       console.log(` [前端 Seek Timeout] 闭包捕获的 currentTime: ${currentTime}s`);    
       console.log(` [前端 Seek Timeout] 播放器实时 currentTime: ${targetTime}s`);    
