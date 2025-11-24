@@ -4088,12 +4088,12 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
         
       // 切换质量  
-      artPlayerRef.current.switchQuality(newUrl).catch((err) => {  
-        console.error('❌ [switchQuality] 失败:', err);  
-        isSwitchingQuality = false;  
-        console.log(` [switchQuality] 错误恢复,重置 isSwitchingQuality = false`);  
-        artPlayerRef.current.off('video:loadedmetadata', onLoadedMetadata);  
-      });  
+artPlayerRef.current.switchQuality(newUrl).catch((err: unknown) => {  
+  console.error('❌ [switchQuality] 失败:', err);  
+  isSwitchingQuality = false;  
+  console.log(` [switchQuality] 错误恢复,重置 isSwitchingQuality = false`);  
+  artPlayerRef.current.off('video:loadedmetadata', onLoadedMetadata);  
+});  
     }, 500);  
   } else {  
     console.log(` [前端 Seek] 不是 banana 源或不是 /t/ 端点,跳过处理`);  
