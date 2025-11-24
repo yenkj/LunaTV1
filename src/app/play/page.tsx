@@ -4017,52 +4017,22 @@ useEffect(() => {
           }
         });
 
-        // 👇 添加防抖优化的 banana 转码 seek 支持  
-let seekTimeout: NodeJS.Timeout | null = null;  
-let isSwitchingQuality = false;  
-  
+        // 👇 添加防抖优化的 banana 转码 seek 支持
+        let seekTimeout: NodeJS.Timeout | null = null;
 artPlayerRef.current.on('seek', (currentTime: number) => {  
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
-  console.log(` [前端 Seek] 触发 seek 事件`);  
-  console.log(` [前端 Seek] currentTime 参数: ${currentTime}s`);  
-  console.log(` [前端 Seek] isSwitchingQuality: ${isSwitchingQuality}`);  
-    
   if (detail?.source === 'banana' && videoUrl.includes('/t/')) {  
-    if (isSwitchingQuality) {  
-      console.log('⏸️ [前端 Seek] 忽略 switchQuality 触发的 seek');  
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
-      return;  
-    }  
-      
-    // ✅ 关键修复: 立即保存 currentTime 的值到 const 变量  
-    const targetTime = currentTime;  
-      
     if (seekTimeout) clearTimeout(seekTimeout);  
     seekTimeout = setTimeout(() => {  
-      // 使用保存的 targetTime,而不是闭包中的 currentTime  
       const baseUrl = videoUrl.split('?')[0];  
       const params = new URLSearchParams(videoUrl.split('?')[1] || '');  
-      params.set('start', targetTime.toString());  
+      params.set('start', currentTime.toString());  
       const newUrl = `${baseUrl}?${params.toString()}`;  
+      console.log(`⏩ 跳转到 ${currentTime.toFixed(2)}s`);  
         
-      console.log(` [前端 Seek] 设置 start=${targetTime}`);  
-      console.log(`⏩ 跳转到 ${targetTime.toFixed(2)}s`);  
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
-        
-      isSwitchingQuality = true;  
-        
-      const onLoadedMetadata = () => {  
-        console.log(`✅ [视频加载] 元数据已加载,设置播放时间为 ${targetTime.toFixed(2)}s`);  
-        isSwitchingQuality = false;  
-        artPlayerRef.current.currentTime = targetTime;  
-        artPlayerRef.current.off('video:loadedmetadata', onLoadedMetadata);  
-      };  
-        
-      artPlayerRef.current.on('video:loadedmetadata', onLoadedMetadata);  
-      artPlayerRef.current.switchQuality(newUrl).catch((err: unknown) => {  
-        console.error('❌ [switchQuality] 失败:', err);  
-        isSwitchingQuality = false;  
-        artPlayerRef.current.off('video:loadedmetadata', onLoadedMetadata);  
+      // ✅ 关键: switchQuality 后手动设置播放器时间  
+      artPlayerRef.current.switchQuality(newUrl).then(() => {  
+        artPlayerRef.current.currentTime = currentTime;  
+        console.log(`✅ 已设置播放器时间为 ${currentTime.toFixed(2)}s`);  
       });  
     }, 500);  
   }  
