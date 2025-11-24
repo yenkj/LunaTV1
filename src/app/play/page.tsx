@@ -1356,40 +1356,21 @@ useEffect(() => {
         // 👇 在这里添加 video 元素清理,用于停止转码
         const video = artPlayerRef.current.video as HTMLVideoElement;
         if (video) {
-      console.log('🔍 [清理] video 元素状态:', {  
-        src: video.src,  
-        networkState: video.networkState,  
-        paused: video.paused  
-      });  
-        
-      // 1. 暂停播放  
+      // 1. 暂停播放
       video.pause();
-      console.log('✅ video.pause() 已调用');
-        
-      // 2. 移除所有 source 元素  
-      const sources = video.querySelectorAll('source');  
-      sources.forEach(s => s.remove());  
-        
-      // 3. 清空 src 并移除属性  
-      video.src = '';  
-      console.log('✅ video.src 已清空');  
-      video.removeAttribute('src');  
-        
-      // 4. 触发 load() 中止网络请求  
-      video.load();  
-      console.log('✅ video.load() 已调用');  
-        
-      // 5. 验证清理效果  
-      setTimeout(() => {  
-        console.log('🔍 [清理] 100ms后验证:', {  
-          src: video.src,  
-          networkState: video.networkState,  
-          paused: video.paused  
-        });  
-      }, 100);  
-        
-      // 6. 🔑 关键:从 DOM 中移除 video 元素  
-      video.remove();  
+
+      // 2. 移除所有 source 元素
+      const sources = video.querySelectorAll('source');
+      sources.forEach(s => s.remove());
+
+      // 3. 清空 src 并移除属性
+      video.src = '';
+      video.removeAttribute('src');
+
+      // 4. 触发 load() 中止网络请求
+      video.load();
+      // 5. 🔑 关键:从 DOM 中移除 video 元素
+      video.remove();
       console.log('🛑 已彻底清理 video 元素');
     }
         // 1. 清理弹幕插件的WebWorker
