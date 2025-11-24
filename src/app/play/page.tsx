@@ -4044,34 +4044,36 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');    
   console.log(` [前端 Seek] 触发 seek 事件`);    
   console.log(` [前端 Seek] currentTime 参数: ${currentTime}s`);    
-  console.log(` [前端 Seek] 播放器当前 URL: ${artPlayerRef.current?.url}`);  
-  console.log(` [前端 Seek] 播放器实际 currentTime: ${artPlayerRef.current?.currentTime}s`);  
-  console.log(` [前端 Seek] 参数与实际差值: ${Math.abs(currentTime - (artPlayerRef.current?.currentTime || 0)).toFixed(2)}s`);  
-  console.log(` [前端 Seek] 触发时间戳: ${Date.now()}`);  
-      
-  if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {    
-    if (seekTimeout) {    
-      console.log(` [前端 Seek] 清除之前的定时器`);    
-      clearTimeout(seekTimeout);    
-    }    
+  console.log(` [前端 Seek] 播放器当前 URL: ${artPlayerRef.current?.url}`);    
+  console.log(` [前端 Seek] 播放器实际 currentTime: ${artPlayerRef.current?.currentTime}s`);    
+  console.log(` [前端 Seek] 参数与实际差值: ${Math.abs(currentTime - (artPlayerRef.current?.currentTime || 0)).toFixed(2)}s`);    
+  console.log(` [前端 Seek] 播放器 seeking 状态: ${artPlayerRef.current?.seeking}`);    
+  console.log(` [前端 Seek] seekTimeout 状态: ${seekTimeoutRef.current ? '存在' : 'null'}`);    
+  console.log(` [前端 Seek] 触发时间戳: ${Date.now()}`);    
         
-    seekTimeout = setTimeout(() => {    
+  if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {    
+    if (seekTimeoutRef.current) {    
+      console.log(` [前端 Seek] 清除之前的定时器`);    
+      clearTimeout(seekTimeoutRef.current);    
+    }    
+          
+    seekTimeoutRef.current = setTimeout(() => {    
       const currentUrl = artPlayerRef.current.url;    
       const baseUrl = currentUrl.split('?')[0];  
         
-      // 🆕 关键修复:使用播放器实时的 currentTime,而不是闭包捕获的参数  
+      // 🆕 关键修复: 使用播放器实时的 currentTime,而不是闭包捕获的参数  
       const targetTime = artPlayerRef.current.currentTime;  
       const newUrl = `${baseUrl}?start=${targetTime}`;    
           
-      console.log(` [前端 Seek Timeout] ═══ 500ms 后执行 ═══`);  
-      console.log(` [前端 Seek Timeout] 闭包捕获的 currentTime: ${currentTime}s`);  
-      console.log(` [前端 Seek Timeout] 播放器实时 currentTime: ${targetTime}s`);  
+      console.log(` [前端 Seek Timeout] ═══ 500ms 后执行 ═══`);    
+      console.log(` [前端 Seek Timeout] 闭包捕获的 currentTime: ${currentTime}s`);    
+      console.log(` [前端 Seek Timeout] 播放器实时 currentTime: ${targetTime}s`);    
       console.log(` [前端 Seek Timeout] 当前 URL: ${currentUrl}`);    
       console.log(` [前端 Seek Timeout] 基础 URL: ${baseUrl}`);    
       console.log(` [前端 Seek Timeout] 新 URL: ${newUrl}`);    
       console.log(`⏩ 跳转到 ${targetTime.toFixed(2)}s`);    
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');    
-          
+            
       // 🆕 添加 .then() 回调强制恢复播放时间  
       artPlayerRef.current.switchQuality(newUrl).then(() => {  
         console.log(` [前端 Seek Timeout] switchQuality 完成`);  
@@ -4089,73 +4091,6 @@ artPlayerRef.current.on('seek', (currentTime: number) => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');    
   }    
 });
-        // 监听拖拽状态 - v5.2.0优化: 在拖拽期间暂停弹幕更新以减少闪烁
-        artPlayerRef.current.on('video:seeking', () => {
-  console.log('🔍 [video:seeking] ═══════════════════════════');  
-  console.log(`🔍 [video:seeking] 开始拖动`);  
-  console.log(`🔍 [video:seeking] 当前时间: ${artPlayerRef.current?.currentTime}s`);  
-  console.log(`🔍 [video:seeking] 当前 URL: ${artPlayerRef.current?.url}`);  
-  console.log(`🔍 [video:seeking] 时间戳: ${Date.now()}`);  
-  console.log('🔍 [video:seeking] ═══════════════════════════');
-          isDraggingProgressRef.current = true;
-          // v5.2.0新增: 拖拽时隐藏弹幕，减少CPU占用和闪烁
-          // 只有在外部弹幕开启且当前显示时才隐藏
-          if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku && 
-              externalDanmuEnabledRef.current && 
-              !artPlayerRef.current.plugins.artplayerPluginDanmuku.isHide) {
-            artPlayerRef.current.plugins.artplayerPluginDanmuku.hide();
-          }
-        });
-
-        artPlayerRef.current.on('video:seeked', () => {
-  console.log('✅ [video:seeked] ═══════════════════════════');  
-  console.log(`✅ [video:seeked] 拖动结束`);  
-  console.log(`✅ [video:seeked] 最终时间: ${artPlayerRef.current?.currentTime}s`);  
-  console.log(`✅ [video:seeked] 当前 URL: ${artPlayerRef.current?.url}`);  
-  console.log(`✅ [video:seeked] 时间戳: ${Date.now()}`);  
-  console.log('✅ [video:seeked] ═══════════════════════════');			
-          isDraggingProgressRef.current = false;
-          // v5.2.0优化: 拖拽结束后根据外部弹幕开关状态决定是否恢复弹幕显示
-          if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-            // 只有在外部弹幕开启时才恢复显示
-            if (externalDanmuEnabledRef.current) {
-              artPlayerRef.current.plugins.artplayerPluginDanmuku.show(); // 先恢复显示
-              setTimeout(() => {
-                // 延迟重置以确保播放状态稳定
-                if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                  artPlayerRef.current.plugins.artplayerPluginDanmuku.reset();
-                  console.log('拖拽结束，弹幕已重置');
-                }
-              }, 100);
-            } else {
-              // 外部弹幕关闭时，确保保持隐藏状态
-              artPlayerRef.current.plugins.artplayerPluginDanmuku.hide();
-              console.log('拖拽结束，外部弹幕已关闭，保持隐藏状态');
-            }
-          }
-        });
-
-        // 监听播放器窗口尺寸变化，触发弹幕重置（双重保障）
-        artPlayerRef.current.on('resize', () => {
-          // 清除之前的重置计时器
-          if (resizeResetTimeoutRef.current) {
-            clearTimeout(resizeResetTimeoutRef.current);
-          }
-          
-          // 延迟重置弹幕，避免连续触发（全屏切换优化）
-          resizeResetTimeoutRef.current = setTimeout(() => {
-            if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-              artPlayerRef.current.plugins.artplayerPluginDanmuku.reset();
-              console.log('窗口尺寸变化，弹幕已重置（防抖优化）');
-            }
-          }, 300); // 300ms防抖，减少全屏切换时的卡顿
-        });
-
-        // 播放器就绪后，如果正在播放则请求 Wake Lock
-        if (artPlayerRef.current && !artPlayerRef.current.paused) {
-          requestWakeLock();
-        }
-      });
 
       // 监听播放状态变化，控制 Wake Lock
       artPlayerRef.current.on('play', () => {
