@@ -92,7 +92,7 @@ function PlayPageClient() {
   // 进度条拖拽状态管理
   const isDraggingProgressRef = useRef(false);
   const seekResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-	
+  
   // resize事件防抖管理
   const resizeResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -3526,24 +3526,7 @@ useEffect(() => {
       // 监听播放器事件
       artPlayerRef.current.on('ready', async () => {
         setError(null);
- // 🆕 在这里添加第三步的代码  
-  artPlayerRef.current.on('video:loadstart', () => {  
-    console.log('📺 [video:loadstart] ═══════════════════════════');  
-    console.log('📺 [video:loadstart] 开始加载新视频源');  
-    console.log(`📺 [video:loadstart] URL: ${artPlayerRef.current?.url}`);  
-    console.log(`📺 [video:loadstart] currentTime: ${artPlayerRef.current?.currentTime}s`);  
-    console.log(`📺 [video:loadstart] 时间戳: ${Date.now()}`);  
-    console.log('📺 [video:loadstart] ═══════════════════════════');  
-  });  
-    
-  artPlayerRef.current.on('video:canplay', () => {  
-    console.log('✅ [video:canplay] ═══════════════════════════');  
-    console.log('✅ [video:canplay] 视频可以播放');  
-    console.log(`✅ [video:canplay] currentTime: ${artPlayerRef.current?.currentTime}s`);  
-    console.log(`✅ [video:canplay] URL: ${artPlayerRef.current?.url}`);  
-    console.log(`✅ [video:canplay] 时间戳: ${Date.now()}`);  
-    console.log('✅ [video:canplay] ═══════════════════════════');  
-  });  
+
         // iOS设备自动播放优化：如果是静音启动的，在开始播放后恢复音量
         if ((isIOS || isSafari) && artPlayerRef.current.muted) {
           console.log('iOS设备静音自动播放，准备在播放开始后恢复音量');
@@ -3563,22 +3546,7 @@ useEffect(() => {
           
           artPlayerRef.current.on('video:play', handleFirstPlay);
         }
-      // 检测banana源的端点类型并显示提示
-      if (detail?.source === 'banana' && videoUrl) {
-        // 使用 /r/ 端点的提示
-        if (videoUrl.includes('/r/')) {
-          artPlayerRef.current.notice.show = '💡 建议使用夸克浏览器播放以获得最佳体验';
-        }
 
-        // 使用 /t/ 端点且仅有内置字幕的提示
-        if (videoUrl.includes('/t/') && (bananaMetadata?.subtitleTracks?.length ?? 0) > 0) {
-          // 检查是否没有外部字幕
-          const hasExternalSubs = loadedSubtitleUrls.length > 0;
-          if (!hasExternalSubs) {
-            artPlayerRef.current.notice.show = '💡 仅内置字幕,建议使用下面外部第三方播放器跳转播放';
-          }
-        }
-      }
         // 添加弹幕插件按钮选择性隐藏CSS
         const optimizeDanmukuControlsCSS = () => {
           if (document.getElementById('danmuku-controls-optimize')) return;
@@ -4018,9 +3986,6 @@ useEffect(() => {
 
         // 监听播放进度跳转，优化弹幕重置（减少闪烁）
         artPlayerRef.current.on('seek', () => {
-			  console.log('🎯 [Seek-弹幕] 第一个 seek 监听器触发');  
-  console.log(`🎯 [Seek-弹幕] 播放器 currentTime: ${artPlayerRef.current?.currentTime}s`);  
-  console.log(`🎯 [Seek-弹幕] 时间戳: ${Date.now()}`); 
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
             // 清除之前的重置计时器
             if (seekResetTimeoutRef.current) {
@@ -4036,47 +4001,27 @@ useEffect(() => {
             }, 500); // 增加到500ms延迟，减少频繁重置导致的闪烁
           }
         });
-		  
-// 修改 seek 事件处理    
-let seekTimeout: NodeJS.Timeout | null = null;  
-let lastKnownTime = 0; // 🆕 持续记录播放器的最后已知时间
 
+        // 👇 添加防抖优化的 banana 转码 seek 支持
+        let seekTimeout: NodeJS.Timeout | null = null;
+        artPlayerRef.current.on('seek', (currentTime: number) => {
+          if (detail?.source === 'banana' && videoUrl.includes('/t/')) {
+            // 清除之前的定时器,避免频繁触发
+            if (seekTimeout) clearTimeout(seekTimeout);
+            // 延迟 500ms 执行,只在用户停止拖动后才重新加载
+            seekTimeout = setTimeout(() => {
+              const baseUrl = videoUrl.split('?')[0];
+              const params = new URLSearchParams(videoUrl.split('?')[1] || '');
+              params.set('start', currentTime.toString());
+              const newUrl = `${baseUrl}?${params.toString()}`;
+              console.log(`⏩ 跳转到 ${currentTime.toFixed(2)}s`);
+              artPlayerRef.current.switchQuality(newUrl);
+            }, 500);
+          }
+        });
         // 监听拖拽状态 - v5.2.0优化: 在拖拽期间暂停弹幕更新以减少闪烁
-artPlayerRef.current.on('video:seeking', () => {  
-  // 🆕 添加诊断日志  
-  console.log('🔍 [video:seeking] ═══════════════════════════');  
-  console.log(`🔍 [video:seeking] 开始拖动`);  
-  console.log(`🔍 [video:seeking] 播放器当前 currentTime: ${artPlayerRef.current?.currentTime}s`);  
-  console.log(`🔍 [video:seeking] 使用最后已知时间: ${lastKnownTime}s`);  
-  console.log(`🔍 [video:seeking] 当前 URL: ${artPlayerRef.current?.url}`);  
-  console.log(`🔍 [video:seeking] 时间戳: ${Date.now()}`);  
-  console.log('🔍 [video:seeking] ═══════════════════════════');  
-    
-  isDraggingProgressRef.current = true;  
-    
-  // 🆕 处理 banana seek  
-  if (detail?.source === 'banana' && artPlayerRef.current?.url?.includes('/t/')) {  
-    if (seekTimeout) {  
-      console.log(`🔍 [video:seeking] 清除之前的定时器`);  
-      clearTimeout(seekTimeout);  
-    }  
-      
-    seekTimeout = setTimeout(() => {  
-      const currentUrl = artPlayerRef.current.url;  
-      const baseUrl = currentUrl.split('?')[0];  
-      const targetTime = lastKnownTime; // 使用最后已知时间  
-      const newUrl = `${baseUrl}?start=${targetTime}`;  
-        
-      console.log(` [video:seeking Timeout] ═══ 500ms 后执行 ═══`);  
-      console.log(` [video:seeking Timeout] 使用最后已知时间: ${targetTime}s`);  
-      console.log(` [video:seeking Timeout] 当前 URL: ${currentUrl}`);  
-      console.log(` [video:seeking Timeout] 新 URL: ${newUrl}`);  
-      console.log(`⏩ 跳转到 ${targetTime.toFixed(2)}s`);  
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');  
-        
-      artPlayerRef.current.switchQuality(newUrl);  
-    }, 500);  
-  }  
+        artPlayerRef.current.on('video:seeking', () => {
+          isDraggingProgressRef.current = true;
           // v5.2.0新增: 拖拽时隐藏弹幕，减少CPU占用和闪烁
           // 只有在外部弹幕开启且当前显示时才隐藏
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku && 
@@ -4086,15 +4031,8 @@ artPlayerRef.current.on('video:seeking', () => {
           }
         });
 
-artPlayerRef.current.on('video:seeked', () => {  
-  console.log('✅ [video:seeked] ═══════════════════════════');  
-  console.log(`✅ [video:seeked] 拖动结束`);  
-  console.log(`✅ [video:seeked] 最终时间: ${artPlayerRef.current?.currentTime}s`);  
-  console.log(`✅ [video:seeked] 当前 URL: ${artPlayerRef.current?.url}`);  
-  console.log(`✅ [video:seeked] 时间戳: ${Date.now()}`);  
-  console.log('✅ [video:seeked] ═══════════════════════════');  
-    
-  isDraggingProgressRef.current = false;
+        artPlayerRef.current.on('video:seeked', () => {
+          isDraggingProgressRef.current = false;
           // v5.2.0优化: 拖拽结束后根据外部弹幕开关状态决定是否恢复弹幕显示
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
             // 只有在外部弹幕开启时才恢复显示
@@ -4344,20 +4282,14 @@ artPlayerRef.current.on('video:seeked', () => {
       });
 
       // 合并的timeupdate监听器 - 处理跳过片头片尾和保存进度
-artPlayerRef.current.on('video:timeupdate', () => {  
-  const currentTime = artPlayerRef.current.currentTime || 0;  
-  const duration = artPlayerRef.current.duration || 0;  
-  const now = performance.now();  
-    
-  // 🆕 在非拖动状态下持续记录最后已知时间  
-  if (!isDraggingProgressRef.current) {  
-    lastKnownTime = currentTime;  
-    console.log(`⏱️ [timeupdate] 记录最后已知时间: ${lastKnownTime.toFixed(2)}s`);  
-  }  
-  
-  // 更新 SkipController 所需的时间信息  
-  setCurrentPlayTime(currentTime);  
-  setVideoDuration(duration);  
+      artPlayerRef.current.on('video:timeupdate', () => {
+        const currentTime = artPlayerRef.current.currentTime || 0;
+        const duration = artPlayerRef.current.duration || 0;
+        const now = performance.now(); // 使用performance.now()更精确
+
+        // 更新 SkipController 所需的时间信息
+        setCurrentPlayTime(currentTime);
+        setVideoDuration(duration);
 
         // 保存播放进度逻辑 - 优化保存间隔以减少网络开销
         const saveNow = Date.now();
